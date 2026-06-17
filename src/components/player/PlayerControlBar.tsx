@@ -18,6 +18,7 @@ interface PlayerControlBarProps {
   onMuteToggle: () => void;
   onShuffleToggle: () => void;
   onRepeatToggle: () => void;
+  onToast?: (message: string, type: 'success' | 'info' | 'error') => void;
 }
 
 export function PlayerControlBar({
@@ -36,8 +37,62 @@ export function PlayerControlBar({
   onVolumeChange,
   onMuteToggle,
   onShuffleToggle,
-  onRepeatToggle
+  onRepeatToggle,
+  onToast
 }: PlayerControlBarProps) {
+
+  const [downloadProgress, setDownloadProgress] = React.useState<string | null>(null);
+
+  const downloadSong = async (track: Track) => {
+    if (!track) return;
+    const vId = track.youtubeId || track.audioUrl;
+    if (!vId) return;
+
+    const videoUrl = `https://www.youtube.com/watch?v=${vId}`;
+    setDownloadProgress('preparing');
+    if (onToast) {
+      onToast(`جاري الاتصال بخادم التحميل وتحضير الأغنية... / Connecting to downloader...`, 'info');
+    }
+
+    try {
+      const response = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          videoUrl,
+          songTitle: track.title
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to download');
+      }
+
+      setDownloadProgress('saving');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${track.title || 'audio'}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      if (onToast) {
+        onToast(`✅ تم تحميل "${track.title}" بنجاح! / Downloaded successfully!`, 'success');
+      }
+    } catch (error) {
+      console.error(error);
+      if (onToast) {
+        onToast(`❌ فشل تحميل الأغنية. الرجاء المحاولة مرة أخرى / Download failed. Please try again.`, 'error');
+      }
+    } finally {
+      setDownloadProgress(null);
+    }
+  };
 
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return '0:00';
@@ -207,13 +262,40 @@ export function PlayerControlBar({
         </button>
 
         {currentTrack && (currentTrack.source === 'youtube' || currentTrack.id.startsWith('youtube-')) && (
-          <button
-            onClick={() => window.open(`https://www.youtube.com/watch?v=${currentTrack.youtubeId || currentTrack.audioUrl}`, '_blank')}
-            className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all ml-1"
-            title="Open on YouTube / فتح في يوتيوب"
-          >
-            <i className="fa-solid fa-download" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Open on YouTube link */}
+            <a
+              href={`https://www.youtube.com/watch?v=${currentTrack.youtubeId || currentTrack.audioUrl}`}
+              target="_blank"
+              rel="noreferrer"
+              className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all"
+              title="Open on YouTube / فتح في يوتيوب"
+            >
+              <i className="fa-brands fa-youtube" />
+            </a>
+
+            {/* Downloader Button with active spinner feedback */}
+            <button
+              onClick={() => downloadSong(currentTrack)}
+              disabled={downloadProgress !== null}
+              className={`cursor-pointer text-xs p-1.5 rounded-lg transition-all ${
+                downloadProgress !== null
+                  ? 'text-brand-purple bg-brand-purple/10 cursor-not-allowed animate-pulse'
+                  : 'text-white/50 hover:text-white hover:bg-white/5'
+              }`}
+              title={
+                downloadProgress === 'preparing'
+                  ? 'جاري التحضير للتحميل... / Preparing...'
+                  : downloadProgress === 'saving'
+                  ? 'جاري الحفظ على جهازك... / Saving...'
+                  : 'تحميل الأغنية كـ MP3 / Download MP3'
+              }
+            >
+              {downloadProgress === 'preparing' && <i className="fa-solid fa-spinner fa-spin text-brand-purple" />}
+              {downloadProgress === 'saving' && <i className="fa-solid fa-circle-notch fa-spin text-brand-purple" />}
+              {downloadProgress === null && <i className="fa-solid fa-download" />}
+            </button>
+          </div>
         )}
       </div>
 

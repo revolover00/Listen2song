@@ -272,6 +272,7 @@ export default function App() {
               onMuteToggle={player.toggleMute}
               onShuffleToggle={player.toggleShuffle}
               onRepeatToggle={player.toggleRepeat}
+              onToast={addToast}
             />
           </div>
         </div>

@@ -30,6 +30,48 @@ export function YouTubeSearchView({
   const [loading, setLoading] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const handleDownload = async (e: React.MouseEvent, item: SearchResult) => {
+    e.stopPropagation();
+    const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+    setDownloadingId(item.videoId);
+    addToast(`جاري تحضير الأغنية للتحميل... / Preparing download for "${item.title}"`, 'info');
+
+    try {
+      const response = await fetch('/api/download', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          videoUrl,
+          songTitle: item.title
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${item.title || 'audio'}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      addToast(`✅ تم تحميل "${item.title}" بنجاح! / Downloaded successfully!`, 'success');
+    } catch (error) {
+      console.error(error);
+      addToast(`❌ فشل تحميل الأغنية. الرجاء المحاولة مرة أخرى / Download failed. Please try again.`, 'error');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   // Quick exploration category tags for broad "free-search" ("بحث بحرية")
   const quickTags = [
@@ -359,6 +401,28 @@ export function YouTubeSearchView({
 
                     {/* Interaction Buttons */}
                     <div className="flex items-center gap-2 shrink-0 ml-2">
+                      {/* Download Button */}
+                      <button
+                        onClick={(e) => handleDownload(e, item)}
+                        disabled={downloadingId !== null}
+                        className={`p-2 md:p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center border ${
+                          downloadingId === item.videoId
+                            ? 'text-brand-purple bg-brand-purple/10 border-brand-purple/20 animate-pulse'
+                            : 'text-white/40 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                        }`}
+                        title={
+                          downloadingId === item.videoId
+                            ? "جاري التحميل... / Downloading..."
+                            : "تحميل الأغنية MP3 / Download MP3"
+                        }
+                      >
+                        {downloadingId === item.videoId ? (
+                          <i className="fa-solid fa-spinner fa-spin text-xs" />
+                        ) : (
+                          <i className="fa-solid fa-download text-xs" />
+                        )}
+                      </button>
+
                       {/* Add to Queue Button */}
                       <button
                         onClick={(e) => {

@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import dns from "dns";
 import { generateLrcFromAudio, generateLrcFromText, fetchLyricsFromGemini } from "./server/lrcEngine";
 import { searchYouTubeOnServer } from "./server/youtubeSearch";
+import { handleDownload } from "./server/youtubeDownload";
 
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
 dns.setDefaultResultOrder("ipv4first");
@@ -239,6 +240,10 @@ async function startServer() {
       });
     }
   });
+
+  // 5. YouTube MP3/Audio Downloader Endpoints
+  app.post("/download", rateLimiter, handleDownload);
+  app.post("/api/download", rateLimiter, handleDownload);
 
   // Serve with Vite in development, static files in production
   if (process.env.NODE_ENV !== "production") {
