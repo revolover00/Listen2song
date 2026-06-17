@@ -8,6 +8,8 @@ if (ffmpegPath) {
   ffmpeg.setFfmpegPath(ffmpegPath);
 }
 
+const agent = ytdl.createAgent();
+
 export async function handleDownload(req: express.Request, res: express.Response) {
   try {
     const { videoUrl, songTitle } = req.body;
@@ -49,6 +51,8 @@ export async function handleDownload(req: express.Request, res: express.Response
       filter: 'audioonly',
       quality: 'highestaudio',
       highWaterMark: 1 << 25, // 32MB buffer to reduce throttling/stalls
+      playerClients: ['IOS', 'ANDROID', 'TV'],
+      agent,
       requestOptions: {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
