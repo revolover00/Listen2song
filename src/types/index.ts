@@ -8,6 +8,8 @@ export interface Track {
   lyrics: string;
   isExplicit?: boolean;
   isDemo?: boolean;
+  source?: 'local' | 'youtube';
+  youtubeId?: string;
 }
 
 export interface PlayerState {

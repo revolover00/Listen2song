@@ -50,11 +50,11 @@ export function SearchView({ tracks, onSelectTrack, currentTrackId, onDeleteTrac
           Search Results ({filtered.length})
         </h3>
         {filtered.length > 0 ? (
-          filtered.map((track) => {
+          filtered.map((track, idx) => {
             const isActive = track.id === currentTrackId;
             return (
               <div
-                key={track.id}
+                key={`${track.id}-${idx}`}
                 onClick={() => onSelectTrack(track.id)}
                 className={`flex items-center justify-between p-3 rounded-xl transition-all cursor-pointer group ${
                   isActive ? 'bg-brand-purple/10 border border-brand-purple/20' : 'hover:bg-white/5 bg-transparent'

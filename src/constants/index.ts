@@ -48,7 +48,7 @@ Be humble`
   },
   {
     id: 'demo-openarms',
-    title: 'Chopin - Nocturne Op. 9 No. 2',
+    title: 'Open Arms',
     artist: 'SZA feat. Travis Scott',
     album: 'SOS',
     audioUrl: 'https://raw.githubusercontent.com/scottschiller/SoundManager2/master/demo/_mp3/sine-1min.mp3',

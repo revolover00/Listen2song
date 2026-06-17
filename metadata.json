@@ -1,5 +1,5 @@
 {
-  "name": "Palestra Music Player",
+  "name": "listen2song",
   "description": "A high-fidelity modern music player with local file and ZIP directory uploading, persistent state, full controls, and dynamic lyrics visualization.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

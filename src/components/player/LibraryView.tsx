@@ -78,11 +78,11 @@ export function LibraryView({
     </div>
   );
 
-  const renderTrackItem = (track: Track) => {
+  const renderTrackItem = (track: Track, idx: number) => {
     const isActive = track.id === currentTrackId;
     return (
       <div
-        key={track.id}
+        key={`${track.id}-${idx}`}
         className={`group/item flex items-center justify-between p-2.5 rounded-2xl border transition-all ${
           isActive
             ? 'bg-brand-purple/10 border-brand-purple/35 shadow-[0_0_15px_rgba(var(--brand-purple),0.1)]'
@@ -106,9 +106,12 @@ export function LibraryView({
               </div>
             )}
           </div>
-          <div className="overflow-hidden text-left leading-normal">
-            <h4 className={`text-xs font-bold truncate ${isActive ? 'text-brand-purple' : 'text-white'}`}>
-              {track.title}
+          <div className="overflow-hidden text-left leading-normal flex-1">
+            <h4 className={`text-xs font-bold truncate ${isActive ? 'text-brand-purple' : 'text-white'} flex items-center gap-1.5`}>
+              <span className="text-[9px] opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube / يوتيوب" : "Local / ملف محلي"}>
+                {track.source === 'youtube' || track.id.startsWith('youtube-') ? '🎬' : '📁'}
+              </span>
+              <span className="truncate">{track.title}</span>
             </h4>
             <p className="text-[10px] text-white/50 truncate">
               {track.artist} • <span className="italic">{track.album}</span>

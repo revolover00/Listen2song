@@ -205,6 +205,16 @@ export function PlayerControlBar({
         >
           <i className="fa-solid fa-circle-nodes" />
         </button>
+
+        {currentTrack && (currentTrack.source === 'youtube' || currentTrack.id.startsWith('youtube-')) && (
+          <button
+            onClick={() => window.open(`https://www.youtube.com/watch?v=${currentTrack.youtubeId || currentTrack.audioUrl}`, '_blank')}
+            className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all ml-1"
+            title="Open on YouTube / فتح في يوتيوب"
+          >
+            <i className="fa-solid fa-download" />
+          </button>
+        )}
       </div>
 
     </div>

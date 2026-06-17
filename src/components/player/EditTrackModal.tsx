@@ -4,18 +4,19 @@ import { Track } from '../../types';
 interface EditTrackModalProps {
   track: Track;
   onClose: () => void;
-  onSave: (trackId: string, title: string, artist: string, album: string) => void;
+  onSave: (trackId: string, title: string, artist: string, album: string, lyrics: string) => void;
 }
 
 export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) {
   const [title, setTitle] = useState(track.title);
   const [artist, setArtist] = useState(track.artist);
   const [album, setAlbum] = useState(track.album);
+  const [lyrics, setLyrics] = useState(track.lyrics || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (title.trim()) {
-      onSave(track.id, title.trim(), artist.trim() || 'Unknown Artist', album.trim() || 'Single');
+      onSave(track.id, title.trim(), artist.trim() || 'Unknown Artist', album.trim() || 'Single', lyrics.trim());
       onClose();
     }
   };
@@ -97,6 +98,19 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
               onChange={(e) => setAlbum(e.target.value)}
               className="w-full bg-[#161616]/80 text-white rounded-xl px-3 py-2.5 text-xs font-semibold border border-white/5 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple transition-all"
               placeholder="e.g. Single"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[9px] uppercase tracking-wider text-white/40 mb-1.5 font-bold px-1 text-left">
+              Lyrics (كلمات الأغنية - نص عادي أو LRC)
+            </label>
+            <textarea
+              value={lyrics}
+              onChange={(e) => setLyrics(e.target.value)}
+              rows={4}
+              className="w-full bg-[#161616]/80 text-white rounded-xl px-3 py-2 text-xs font-semibold border border-white/5 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple transition-all resize-y select-text"
+              placeholder="Paste lyrics here / الصق كلمات الأغنية هنا [00:15] Lyrics can have timestamps"
             />
           </div>
 

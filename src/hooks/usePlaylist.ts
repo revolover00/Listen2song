@@ -24,6 +24,15 @@ export function usePlaylist() {
           parsed = [...DEFAULT_TRACKS];
         }
 
+        // Deduplicate parsed array to prevent duplicate IDs/keys
+        const uniqueParsedMap = new Map<string, Track>();
+        parsed.forEach(track => {
+          if (track && track.id) {
+            uniqueParsedMap.set(track.id, track);
+          }
+        });
+        parsed = Array.from(uniqueParsedMap.values());
+
         // Loop and rehydrate Blob URLs for uploaded tracks stored in IndexedDB
         const rehydratedResults = await Promise.all(
           parsed.map(async (track) => {
@@ -102,6 +111,9 @@ export function usePlaylist() {
 
   const addTrack = (track: Track) => {
     setTracks((prev) => {
+      if (prev.some(t => t.id === track.id)) {
+        return prev;
+      }
       const updated = [...prev, track];
       try {
         localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(updated));
@@ -114,7 +126,9 @@ export function usePlaylist() {
 
   const addTracks = (newTracksList: Track[]) => {
     setTracks((prev) => {
-      const updated = [...prev, ...newTracksList];
+      const filtered = newTracksList.filter(nt => !prev.some(t => t.id === nt.id));
+      if (filtered.length === 0) return prev;
+      const updated = [...prev, ...filtered];
       try {
         localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(updated));
       } catch (e) {
@@ -175,6 +189,26 @@ export function usePlaylist() {
         localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(updated));
       } catch (e) {
         console.error('Failed to save updated metadata:', e);
+      }
+      return updated;
+    });
+  };
+
+  const updateTrackLyrics = (trackId: string, lyrics: string) => {
+    setTracks((prev) => {
+      const updated = prev.map((t) => {
+        if (t.id === trackId) {
+          return {
+            ...t,
+            lyrics
+          };
+        }
+        return t;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save updated lyrics:', e);
       }
       return updated;
     });
@@ -334,6 +368,20 @@ export function usePlaylist() {
         }
       }
 
+      // 1b. Scan ZIP for loose LRC lyrics files
+      const zipLyrics: Record<string, string> = {};
+      const lrcEntries = Object.keys(zipContents.files).filter(
+        name => name.toLowerCase().endsWith('.lrc') && !name.startsWith('__MACOSX')
+      );
+      for (const lrcName of lrcEntries) {
+        try {
+          const text = await zipContents.files[lrcName].async('text');
+          zipLyrics[lrcName.toLowerCase()] = text;
+        } catch (err) {
+          console.warn('Failed to extract LRC text from ZIP:', lrcName, err);
+        }
+      }
+
       // Helper matching algorithm to find best loose artwork for an MP3 file inside the ZIP
       const getMatchingZipImage = (mp3Path: string): { url: string; blob: Blob | null } | null => {
         const normalizedPath = mp3Path.toLowerCase();
@@ -387,6 +435,14 @@ export function usePlaylist() {
         return null;
       };
 
+      // Helper matching algorithm to find best loose LRC file inside the ZIP
+      const getMatchingZipLrc = (mp3Path: string): string | null => {
+        const normalizedPath = mp3Path.toLowerCase();
+        const base = normalizedPath.replace(/\.[^/.]+$/, ""); // strip extension
+        const lrcPath = base + '.lrc';
+        return zipLyrics[lrcPath] || null;
+      };
+
       // 2. Scan ZIP for MP3 music files
       const fileNames = Object.keys(zipContents.files).filter(
         name => name.toLowerCase().endsWith('.mp3') && !name.startsWith('__MACOSX')
@@ -436,6 +492,7 @@ export function usePlaylist() {
         }
 
         const trackId = `uploaded-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 5)}`;
+        const zipLrc = getMatchingZipLrc(name);
 
         newTracksList.push({
           id: trackId,
@@ -444,7 +501,7 @@ export function usePlaylist() {
           album: 'ZIP Archive',
           audioUrl,
           coverUrl,
-          lyrics: `No lyrics loaded for ${title}.`,
+          lyrics: zipLrc || `No lyrics loaded for ${title}.`,
           isExplicit: false
         });
 
@@ -484,6 +541,7 @@ export function usePlaylist() {
     deletePlaylist,
     addTrackToPlaylist,
     removeTrackFromPlaylist,
-    updateTrackMetadata
+    updateTrackMetadata,
+    updateTrackLyrics
   };
 }

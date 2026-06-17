@@ -9,6 +9,7 @@ import { ArtworkDisplay } from './components/player/ArtworkDisplay';
 import { PlayerControlBar } from './components/player/PlayerControlBar';
 import { UploadZone } from './components/player/UploadZone';
 import { SearchView } from './components/player/SearchView';
+import { YouTubeSearchView } from './components/player/YouTubeSearchView';
 import { LibraryView } from './components/player/LibraryView';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { ToastMessage, Track, Playlist } from './types';
@@ -19,6 +20,7 @@ export default function App() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Core Hooks State
   const {
@@ -36,7 +38,8 @@ export default function App() {
     deletePlaylist,
     addTrackToPlaylist,
     removeTrackFromPlaylist,
-    updateTrackMetadata
+    updateTrackMetadata,
+    updateTrackLyrics
   } = usePlaylist();
 
 
@@ -156,49 +159,24 @@ export default function App() {
       {/* Container holding the high fidelity music board */}
       <div className="w-full h-full text-white flex flex-col md:flex-row overflow-hidden relative z-10 transition-all duration-300">
         
-        {/* Left Side: Navigation & stacked mini covers (Hidden on mobile for fluid layout) */}
-        <div className="hidden md:flex md:flex-shrink-0 md:h-full">
-          <Sidebar
-            tracks={tracks}
-            currentTrackId={player.currentTrack?.id || null}
-            onSelectTrack={player.selectTrack}
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-            onDeleteTrack={onDeleteTrackWithFeedback}
-            playlists={playlists}
-            activePlaylistId={activePlaylistId}
-            setActivePlaylistId={setActivePlaylistId}
-            onCreatePlaylist={(name) => {
-              createPlaylist(name);
-              addToast(`Created playlist "${name}" Successfully!`, 'success');
-            }}
-            onRenamePlaylist={(id, name) => {
-              renamePlaylist(id, name);
-              addToast(`Playlist renamed to "${name}"`, 'success');
-            }}
-            onDeletePlaylist={(id) => {
-              deletePlaylist(id);
-              addToast(`Playlist deleted successfully`, 'info');
-            }}
-            onEditTrack={(track) => setEditingTrack(track)}
-            onAddTrackToPlaylist={(playlistId, trackId) => {
-              addTrackToPlaylist(playlistId, trackId);
-              const pl = playlists.find(p => p.id === playlistId);
-              const tr = tracks.find(t => t.id === trackId);
-              if (pl && tr) {
-                addToast(`"${tr.title}" has been added to "${pl.name}"`, 'success');
-              } else {
-                addToast('Added song to playlist!', 'success');
-              }
-            }}
-          />
-        </div>
+        {/* Left Side: Simplified stacked songs list library, viewable across all sections when active */}
+        {isSidebarOpen && (
+          <div className="hidden md:flex md:flex-shrink-0 md:h-full animate-fadeIn">
+            <Sidebar
+              tracks={tracks}
+              currentTrackId={player.currentTrack?.id || null}
+              onSelectTrack={player.selectTrack}
+              onDeleteTrack={onDeleteTrackWithFeedback}
+              onEditTrack={(track) => setEditingTrack(track)}
+            />
+          </div>
+        )}
 
 
         {/* Right Side: Primary Content Frame with interactive Top Bar */}
         <div className="flex-1 flex flex-col justify-between overflow-hidden p-3 md:p-6 gap-3 md:gap-6">
           
-          {/* Top Header Bar containing the integrated Mini Player Box (مربع تشغيل الأغاني) */}
+          {/* Top Header Bar containing the integrated Mini Player Box (مربع تشغيل الأغاني) & Sidebar controls */}
           <TopHeaderBar
             currentTrack={player.currentTrack}
             isPlaying={player.isPlaying}
@@ -207,6 +185,8 @@ export default function App() {
             onPrev={player.prev}
             activeSection={activeSection}
             setActiveSection={setActiveSection}
+            isSidebarOpen={isSidebarOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
           />
 
           <div className="flex-1 flex flex-col md:flex-row items-center gap-6 overflow-hidden">
@@ -220,8 +200,10 @@ export default function App() {
                   onNextTrackClick={player.next}
                 />
                 <LyricsWindow
-                  lyrics={player.currentTrack?.lyrics || ''}
+                  currentTrack={player.currentTrack}
                   currentTime={player.currentTime}
+                  onToast={addToast}
+                  onEditCurrentTrack={() => player.currentTrack && setEditingTrack(player.currentTrack)}
                 />
               </>
             )}
@@ -241,6 +223,16 @@ export default function App() {
                 onSelectTrack={player.selectTrack}
                 currentTrackId={player.currentTrack?.id || null}
                 onDeleteTrack={onDeleteTrackWithFeedback}
+              />
+            )}
+
+            {activeSection === 'youtube' && (
+              <YouTubeSearchView
+                onSelectTrack={player.selectTrack}
+                currentTrackId={player.currentTrack?.id || null}
+                addTrack={addTrack}
+                updateTrackLyrics={updateTrackLyrics}
+                addToast={addToast}
               />
             )}
 
@@ -286,53 +278,14 @@ export default function App() {
 
       </div>
 
-      {/* Mobile Bottom Navigation Bar - ONLY on mobile! */}
-      <div className="md:hidden flex justify-around items-center bg-[#121212]/90 backdrop-blur-xl border-t border-white/5 px-4 py-3 pb-safe z-30 relative flex-shrink-0">
-        <button
-          onClick={() => setActiveSection('home')}
-          className={`flex flex-col items-center gap-1 transition-colors ${activeSection === 'home' ? 'text-brand-purple font-semibold' : 'text-white/50 hover:text-white'}`}
-        >
-          <span className="text-sm">
-            <i className="fa-solid fa-house" />
-          </span>
-          <span className="text-[9px]">Home</span>
-        </button>
-        <button
-          onClick={() => setActiveSection('search')}
-          className={`flex flex-col items-center gap-1 transition-colors ${activeSection === 'search' ? 'text-brand-purple font-semibold' : 'text-white/50 hover:text-white'}`}
-        >
-          <span className="text-sm">
-            <i className="fa-solid fa-magnifying-glass" />
-          </span>
-          <span className="text-[9px]">Search</span>
-        </button>
-        <button
-          onClick={() => setActiveSection('albums')}
-          className={`flex flex-col items-center gap-1 transition-colors ${['albums', 'artists', 'mix', 'songs'].includes(activeSection) ? 'text-brand-purple font-semibold' : 'text-white/50 hover:text-white'}`}
-        >
-          <span className="text-sm">
-            <i className="fa-solid fa-compact-disc" />
-          </span>
-          <span className="text-[9px]">Library</span>
-        </button>
-        <button
-          onClick={() => setActiveSection('upload')}
-          className={`flex flex-col items-center gap-1 transition-colors ${activeSection === 'upload' ? 'text-brand-purple font-semibold' : 'text-white/50 hover:text-white'}`}
-        >
-          <span className="text-sm">
-            <i className="fa-solid fa-cloud-arrow-up" />
-          </span>
-          <span className="text-[9px]">Upload</span>
-        </button>
-      </div>
-
       {editingTrack && (
         <EditTrackModal
           track={editingTrack}
           onClose={() => setEditingTrack(null)}
-          onSave={(trackId, title, artist, album) => {
+          onSave={(trackId, title, artist, album, lyrics) => {
             updateTrackMetadata(trackId, title, artist, album);
-            addToast(`Song metadata renamed successfully to "${title}"`, 'success');
+            updateTrackLyrics(trackId, lyrics);
+            addToast(`Song details and lyrics updated successfully! / تم تحديث بيانات وكلمات الأغنية بنجاح`, 'success');
           }}
         />
       )}
