@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Track } from '../../types';
 import { useLyrics } from '../../hooks/useLyrics';
-import { Copy, Music } from 'lucide-react';
+import { Copy, Music, Mic } from 'lucide-react';
 
 interface LyricsWindowProps {
   currentTrack: Track | null;
@@ -204,7 +204,7 @@ export function LyricsWindow({ currentTrack, currentTime, onToast, onEditCurrent
                     : 'text-white/60 font-medium text-xs md:text-sm opacity-70'
                 }`}
               >
-                {lyric.text || '🎙️ • • • 🎙️'}
+                {lyric.text || '• • •'}
               </div>
             );
           })
@@ -226,7 +226,7 @@ export function LyricsWindow({ currentTrack, currentTime, onToast, onEditCurrent
 
       {/* Footer descriptor status item */}
       <div className="mt-2 text-[9px] text-white/30 text-right uppercase tracking-wider flex-shrink-0 z-10 flex items-center justify-end gap-1 select-none pt-2 border-t border-white/5">
-        <i className="fa-solid fa-microphone-lines mr-1 text-brand-purple" /> 
+        <Mic className="w-3 h-3 mr-1 text-brand-purple inline" /> 
         {isSynced ? 'Synced Karaoke Mode Active' : 'Static Reading Active'}
       </div>
     </div>

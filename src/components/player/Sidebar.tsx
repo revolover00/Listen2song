@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Track } from '../../types';
+import { Search, X, Pencil, Trash2, Youtube, Music } from 'lucide-react';
 
 interface SidebarProps {
   tracks: Track[];
@@ -49,22 +50,22 @@ export function Sidebar({
 
         {/* Quick Search */}
         <div className="relative">
-          <span className="absolute inset-y-0 left-3 flex items-center text-white/40 text-[11px]">
-            <i className="fa-solid fa-magnifying-glass" />
+          <span className="absolute inset-y-0 left-3 flex items-center text-white/40">
+            <Search className="h-3 w-3" />
           </span>
           <input
             type="text"
             placeholder="Search within library... / ابحث هنا..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-black/40 border border-white/5 focus:border-brand-purple/40 rounded-xl pl-8.5 pr-3 py-2 text-[10px] text-white placeholder-white/30 focus:outline-none transition-all"
+            className="w-full bg-black/40 border border-white/5 focus:border-brand-purple/40 rounded-xl pl-8.5 pr-8 py-2 text-[10px] text-white placeholder-white/30 focus:outline-none transition-all"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute inset-y-0 right-2.5 flex items-center text-white/40 hover:text-white transition-all text-[10px] cursor-pointer"
+              className="absolute inset-y-0 right-2.5 flex items-center text-white/40 hover:text-white transition-all cursor-pointer p-0.5"
             >
-              <i className="fa-solid fa-xmark" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>
@@ -103,8 +104,12 @@ export function Sidebar({
                 </div>
                 <div className="overflow-hidden text-left leading-normal flex-1">
                   <p className={`text-[11.5px] font-bold truncate ${isActive ? 'text-brand-purple' : 'text-white'} flex items-center gap-1.5`}>
-                    <span className="text-[10px] opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube / يوتيوب" : "Local / ملف محلي"}>
-                      {track.source === 'youtube' || track.id.startsWith('youtube-') ? '🎬' : '📁'}
+                    <span className="opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube / يوتيوب" : "Local / ملف محلي"}>
+                      {track.source === 'youtube' || track.id.startsWith('youtube-') ? (
+                        <Youtube className="h-3.5 w-3.5 text-red-500" />
+                      ) : (
+                        <Music className="h-3.5 w-3.5 text-brand-purple" />
+                      )}
                     </span>
                     <span className="truncate">{track.title}</span>
                   </p>
@@ -118,10 +123,10 @@ export function Sidebar({
               <div className="flex items-center gap-1 opacity-100 md:opacity-30 group-hover/track:opacity-100 transition-opacity shrink-0 ml-1.5">
                 <button
                   onClick={() => onEditTrack(track)}
-                  className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/5 hover:bg-brand-purple/20 text-white/60 hover:text-brand-purple transition-all cursor-pointer text-[9px]"
+                  className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/5 hover:bg-brand-purple/20 text-white/60 hover:text-brand-purple transition-all cursor-pointer p-1"
                   title="Rename title / تعديل الاسم"
                 >
-                  <i className="fa-solid fa-pencil" />
+                  <Pencil className="h-3 w-3" />
                 </button>
 
                 {onDeleteTrack && (
@@ -136,10 +141,10 @@ export function Sidebar({
                         onDeleteTrack(track.id);
                       }
                     }}
-                    className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-all cursor-pointer text-[9px]"
+                    className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-all cursor-pointer p-1"
                     title="Delete track / حذف الأغنية"
                   >
-                    <i className="fa-solid fa-trash-can" />
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 )}
               </div>

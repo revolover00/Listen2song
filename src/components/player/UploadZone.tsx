@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { UploadCloud, Disc, Music, FileArchive } from 'lucide-react';
 
 interface UploadZoneProps {
   onMp3Upload: (files: FileList) => Promise<void>;
@@ -80,7 +81,7 @@ export function UploadZone({
       {isProcessing ? (
         <div className="text-center w-full max-w-xs space-y-4">
           <div className="relative inline-block">
-            <i className="fa-solid fa-cloud-arrow-up text-5xl text-brand-purple animate-bounce" />
+            <UploadCloud className="h-12 w-12 text-brand-purple animate-bounce" />
             <span className="absolute -top-1 -right-1 flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-purple-dark opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-brand-purple"></span>
@@ -112,7 +113,7 @@ export function UploadZone({
           onClick={() => fileInputRef.current?.click()}
         >
           <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mb-4 text-[#8C8C8C] group-hover:text-white transition-all">
-            <i className="fa-solid fa-compact-disc text-2xl animate-spin-slow text-brand-purple" />
+            <Disc className="h-6 w-6 animate-spin-slow text-brand-purple" />
           </div>
 
           <h3 className="text-sm md:text-base font-bold text-white mb-2">
@@ -129,9 +130,9 @@ export function UploadZone({
                 e.stopPropagation();
                 fileInputRef.current?.click();
               }}
-              className="cursor-pointer flex-1 bg-brand-purple/10 hover:bg-brand-purple/20 text-brand-purple text-xs font-bold py-2.5 px-4 rounded-xl transition-all border border-brand-purple/20"
+              className="cursor-pointer flex-1 bg-brand-purple/10 hover:bg-brand-purple/20 text-brand-purple text-xs font-bold py-2.5 px-4 rounded-xl transition-all border border-brand-purple/20 flex items-center justify-center gap-2"
             >
-              <i className="fa-solid fa-music mr-2" /> Select MP3s
+              <Music className="h-4.5 w-4.5" /> Select MP3s
             </button>
             
             <button
@@ -140,9 +141,9 @@ export function UploadZone({
                 e.stopPropagation();
                 zipInputRef.current?.click();
               }}
-              className="cursor-pointer flex-1 bg-white/5 hover:bg-white/10 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all border border-white/10"
+              className="cursor-pointer flex-1 bg-white/5 hover:bg-white/10 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all border border-white/10 flex items-center justify-center gap-2"
             >
-              <i className="fa-solid fa-file-zipper mr-2" /> Select ZIP
+              <FileArchive className="h-4.5 w-4.5" /> Select ZIP
             </button>
           </div>
           

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Track } from '../../types';
+import { Search, XCircle, Trash2, Play, Frown } from 'lucide-react';
 
 interface SearchViewProps {
   tracks: Track[];
@@ -25,21 +26,21 @@ export function SearchView({ tracks, onSelectTrack, currentTrackId, onDeleteTrac
       {/* Search Input bar */}
       <div className="relative mb-6 flex-shrink-0">
         <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-white/40">
-          <i className="fa-solid fa-magnifying-glass text-sm" />
+          <Search className="h-4 w-4" />
         </span>
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by track name, artist, or album..."
-          className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 text-white placeholder-white/30 text-xs md:text-sm pl-11 pr-4 py-3 rounded-2xl border border-white/5 focus:border-brand-purple/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/40 transition-all font-medium"
+          className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 text-white placeholder-white/30 text-xs md:text-sm pl-11 pr-11 py-3 rounded-2xl border border-white/5 focus:border-brand-purple/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/40 transition-all font-medium"
         />
         {query && (
           <button
             onClick={() => setQuery('')}
             className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/40 hover:text-white cursor-pointer"
           >
-            <i className="fa-solid fa-circle-xmark text-sm" />
+            <XCircle className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -97,11 +98,11 @@ export function SearchView({ tracks, onSelectTrack, currentTrackId, onDeleteTrac
                       className="p-2 text-white/40 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all cursor-pointer flex items-center justify-center"
                       title="Remove song"
                     >
-                      <i className="fa-solid fa-trash-can text-xs" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
-                  <span className="text-white/40 group-hover:text-white transition-colors p-2">
-                    <i className="fa-solid fa-circle-play text-sm text-brand-purple" />
+                  <span className="text-white/40 group-hover:text-white transition-colors p-2 flex items-center justify-center">
+                    <Play className="h-4 w-4 text-brand-purple fill-current" />
                   </span>
                 </div>
               </div>
@@ -109,7 +110,7 @@ export function SearchView({ tracks, onSelectTrack, currentTrackId, onDeleteTrac
           })
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center text-white/30">
-            <i className="fa-solid fa-face-frown text-3xl mb-3 text-white/20" />
+            <Frown className="h-10 w-10 mb-3 text-white/20" />
             <p className="text-xs">No matching tracks found</p>
             <p className="text-[10px] text-white/20">Try searching for other words or upload more songs</p>
           </div>

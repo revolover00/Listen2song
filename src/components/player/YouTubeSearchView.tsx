@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
 import { Track } from '../../types';
+import { 
+  Youtube, 
+  Search, 
+  XCircle, 
+  Loader2, 
+  CheckCircle2, 
+  Download, 
+  Plus, 
+  Play, 
+  Frown 
+} from 'lucide-react';
 
 interface YouTubeSearchViewProps {
   onSelectTrack: (id: string) => void;
@@ -54,6 +65,24 @@ export function YouTubeSearchView({
         throw new Error('Download failed');
       }
 
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await response.json();
+        if (json.success && json.redirectUrl) {
+          // If the server tells us to download directly (extremely reliable on Vercel/serverless)
+          const a = document.createElement('a');
+          a.href = json.redirectUrl;
+          a.download = `${item.title || 'audio'}.mp3`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          addToast(`✅ تم تحميل "${item.title}" بنجاح! / Downloaded successfully!`, 'success');
+          return;
+        } else if (json.error) {
+          throw new Error(json.error);
+        }
+      }
+
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -65,9 +94,10 @@ export function YouTubeSearchView({
       URL.revokeObjectURL(url);
 
       addToast(`✅ تم تحميل "${item.title}" بنجاح! / Downloaded successfully!`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      addToast(`❌ فشل تحميل الأغنية. الرجاء المحاولة مرة أخرى / Download failed. Please try again.`, 'error');
+      const errorMsg = error.message ? `: ${error.message}` : '';
+      addToast(`❌ فشل تحميل الأغنية. الرجاء المحاولة مرة أخرى${errorMsg} / Download failed. Please try again.`, 'error');
     } finally {
       setDownloadingId(null);
     }
@@ -265,7 +295,7 @@ export function YouTubeSearchView({
       <div className="flex-shrink-0 mb-4 flex items-center justify-between">
         <div>
           <h2 className="text-sm md:text-base font-bold tracking-tight text-white flex items-center gap-2">
-            <i className="fa-brands fa-youtube text-red-500 animate-pulse text-lg" />
+            <Youtube className="h-5 w-5 text-red-500 animate-pulse" />
             YouTube Search / بحث يوتيوب بحرية
           </h2>
           <p className="text-[10px] md:text-xs text-white/40 mt-1">
@@ -303,14 +333,14 @@ export function YouTubeSearchView({
       <form onSubmit={handleSearch} className="relative mb-5 flex-shrink-0 flex items-center gap-2">
         <div className="relative flex-1">
           <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-white/40">
-            <i className="fa-solid fa-magnifying-glass text-sm" />
+            <Search className="h-4 w-4" />
           </span>
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search matching songs, artists or channels on YouTube... (ابحث عن أي أغنية أو كليب)"
-            className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 text-white placeholder-white/30 text-xs md:text-sm pl-11 pr-4 py-3 rounded-2xl border border-white/5 focus:border-brand-purple/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/40 transition-all font-medium"
+            className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 text-white placeholder-white/30 text-xs md:text-sm pl-11 pr-11 py-3 rounded-2xl border border-white/5 focus:border-brand-purple/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/40 transition-all font-medium"
           />
           {query && (
             <button
@@ -318,7 +348,7 @@ export function YouTubeSearchView({
               onClick={() => setQuery('')}
               className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/40 hover:text-white cursor-pointer"
             >
-              <i className="fa-solid fa-circle-xmark text-sm" />
+              <XCircle className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -328,7 +358,7 @@ export function YouTubeSearchView({
           disabled={loading || !query.trim()}
           className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs md:text-sm px-5 py-3 rounded-2xl flex items-center gap-2 font-bold cursor-pointer transition-all duration-300 disabled:opacity-50 shadow-lg shadow-brand-purple-blob/15 shrink-0"
         >
-          <i className="fa-solid fa-volume-high" />
+          <Search className="h-4 w-4" />
           Search / بحث
         </button>
       </form>
@@ -337,7 +367,7 @@ export function YouTubeSearchView({
       <div className="flex-1 overflow-y-auto pr-1 space-y-2">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 text-center text-white/40">
-            <i className="fa-solid fa-spinner animate-spin text-4xl text-brand-purple mb-4" />
+            <Loader2 className="h-8 w-8 animate-spin text-brand-purple mb-4" />
             <p className="text-xs font-bold font-display uppercase tracking-widest text-brand-purple animate-pulse">Searching YouTube stream database...</p>
             <p className="text-[10px] text-white/25 mt-1">This will only take a couple of seconds</p>
           </div>
@@ -393,7 +423,7 @@ export function YouTubeSearchView({
                           {item.title}
                         </p>
                         <p className="text-[10px] md:text-xs text-white/40 truncate flex items-center gap-1.5 mt-1">
-                          <i className="fa-solid fa-circle-check text-white/35 text-[9px]" />
+                          <CheckCircle2 className="text-brand-purple h-3.5 w-3.5" />
                           {item.channelName}
                         </p>
                       </div>
@@ -405,7 +435,7 @@ export function YouTubeSearchView({
                       <button
                         onClick={(e) => handleDownload(e, item)}
                         disabled={downloadingId !== null}
-                        className={`p-2 md:p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center border ${
+                        className={`p-2 lg:p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center border ${
                           downloadingId === item.videoId
                             ? 'text-brand-purple bg-brand-purple/10 border-brand-purple/20 animate-pulse'
                             : 'text-white/40 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
@@ -417,9 +447,9 @@ export function YouTubeSearchView({
                         }
                       >
                         {downloadingId === item.videoId ? (
-                          <i className="fa-solid fa-spinner fa-spin text-xs" />
+                          <Loader2 className="h-4 w-4 animate-spin text-brand-purple" />
                         ) : (
-                          <i className="fa-solid fa-download text-xs" />
+                          <Download className="h-4 w-4" />
                         )}
                       </button>
 
@@ -429,15 +459,15 @@ export function YouTubeSearchView({
                           e.stopPropagation();
                           handleAddToQueue(item);
                         }}
-                        className="p-2 md:p-2.5 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all cursor-pointer flex items-center justify-center border border-white/5"
+                        className="p-2 lg:p-2.5 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all cursor-pointer flex items-center justify-center border border-white/5"
                         title="Add to queue / إضافة للانتظار"
                       >
-                        <i className="fa-solid fa-plus text-xs" />
+                        <Plus className="h-4 w-4" />
                       </button>
 
                       {/* Single Action Play button */}
-                      <span className="w-8 h-8 md:w-9.5 md:h-9.5 rounded-xl bg-brand-purple/10 border border-brand-purple/20 text-brand-purple flex items-center justify-center group-hover:bg-brand-purple group-hover:text-white transition-all duration-500 scale-[0.95] group-hover:scale-100">
-                        <i className="fa-solid fa-play ml-0.5 text-xs text-inherit" />
+                      <span className="w-8 h-8 md:w-9.5 md:h-9.5 rounded-xl bg-brand-purple/10 border border-brand-purple/20 text-brand-purple flex items-center justify-center group-hover:bg-brand-purple group-hover:text-white transition-all duration-500 scale-[0.95] group-hover:scale-100 p-2">
+                        <Play className="h-4 w-4 ml-0.5 fill-current" />
                       </span>
                     </div>
                   </div>
@@ -449,19 +479,19 @@ export function YouTubeSearchView({
           <div className="flex flex-col items-center justify-center py-16 text-center text-white/30">
             {loadingSuggestions ? (
               <div className="flex flex-col items-center justify-center">
-                <i className="fa-solid fa-spinner animate-spin text-3xl mb-3 text-brand-purple" />
+                <Loader2 className="h-8 w-8 animate-spin mb-3 text-brand-purple" />
                 <p className="text-xs">Loading initial suggestions...</p>
               </div>
             ) : hasSearched ? (
               <>
-                <i className="fa-solid fa-face-frown text-4xl mb-3 text-white/10" />
+                <Frown className="h-10 w-10 mb-3 text-white/10" />
                 <p className="text-xs">No matching streams found</p>
                 <p className="text-[10px] text-white/20 mt-1">Try check spelling or searching for a different track query.</p>
               </>
             ) : (
               <>
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4">
-                  <i className="fa-brands fa-youtube text-2xl text-white/20" />
+                <div className="w-14 h-14 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-center mb-4 p-3">
+                  <Youtube className="h-8 w-8 text-white/20" />
                 </div>
                 <p className="text-xs font-medium">Search millions of songs instantly</p>
                 <p className="text-[10px] text-white/20 mt-1">Enter song keywords or video creators to start streaming.</p>

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Track } from '../../types';
+import { X, Upload, FileText } from 'lucide-react';
 
 interface EditTrackModalProps {
   track: Track;
@@ -12,6 +13,21 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
   const [artist, setArtist] = useState(track.artist);
   const [album, setAlbum] = useState(track.album);
   const [lyrics, setLyrics] = useState(track.lyrics || '');
+  const [lyricsMode, setLyricsMode] = useState<'text' | 'file'>('text');
+  const [uploadStatus, setUploadStatus] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      setLyrics(text || '');
+      setUploadStatus(`Loaded: ${file.name} (${(text || '').split('\n').length} lines)`);
+    };
+    reader.readAsText(file);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +56,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
             onClick={onClose}
             className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/50 hover:text-white transition-all cursor-pointer"
           >
-            <i className="fa-solid fa-xmark text-xs" />
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -102,16 +118,71 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
           </div>
 
           <div>
-            <label className="block text-[9px] uppercase tracking-wider text-white/40 mb-1.5 font-bold px-1 text-left">
-              Lyrics (كلمات الأغنية - نص عادي أو LRC)
-            </label>
-            <textarea
-              value={lyrics}
-              onChange={(e) => setLyrics(e.target.value)}
-              rows={4}
-              className="w-full bg-[#161616]/80 text-white rounded-xl px-3 py-2 text-xs font-semibold border border-white/5 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple transition-all resize-y select-text"
-              placeholder="Paste lyrics here / الصق كلمات الأغنية هنا [00:15] Lyrics can have timestamps"
-            />
+            <div className="flex items-center justify-between mb-1.5 px-1">
+              <label className="text-[9px] uppercase tracking-wider text-white/40 font-bold">
+                Lyrics (كلمات الأغنية)
+              </label>
+              <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/5 gap-0.5 text-[8px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setLyricsMode('text')}
+                  className={`px-2 py-0.5 rounded-md cursor-pointer transition-all ${
+                    lyricsMode === 'text' ? 'bg-brand-purple text-white shadow-sm' : 'text-white/40 hover:text-white'
+                  }`}
+                >
+                  Text / كتابة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLyricsMode('file')}
+                  className={`px-2 py-0.5 rounded-md cursor-pointer transition-all ${
+                    lyricsMode === 'file' ? 'bg-brand-purple text-white shadow-sm' : 'text-white/40 hover:text-white'
+                  }`}
+                >
+                  File / رفع ملف
+                </button>
+              </div>
+            </div>
+
+            {lyricsMode === 'text' ? (
+              <textarea
+                value={lyrics}
+                onChange={(e) => setLyrics(e.target.value)}
+                rows={3}
+                className="w-full bg-[#161616]/80 text-white rounded-xl px-3 py-2 text-xs font-semibold border border-white/5 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple transition-all resize-y select-text"
+                placeholder="Paste lyrics here / الصق كلمات الأغنية هنا [00:15] Lyrics can have timestamps"
+              />
+            ) : (
+              <div className="space-y-2">
+                <div 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full border border-dashed border-white/10 hover:border-brand-purple/40 bg-white/[0.02] hover:bg-brand-purple/5 transition-all rounded-xl p-3 flex flex-col items-center justify-center cursor-pointer gap-1"
+                >
+                  <Upload className="h-4 w-4 text-brand-purple animate-pulse" />
+                  <span className="text-[10px] font-bold text-white/60">Choose LRC or TXT File</span>
+                  <span className="text-[8px] text-white/30">اضغط لرفع ملف الكلمات المتزامن (.lrc)</span>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".lrc,.txt"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </div>
+                {uploadStatus && (
+                  <div className="flex items-center gap-1.5 text-[9px] text-brand-purple bg-brand-purple/10 border border-brand-purple/15 px-2.5 py-1 rounded-lg font-semibold animate-fadeIn justify-between">
+                    <span className="truncate max-w-[170px]">{uploadStatus}</span>
+                    <button 
+                      type="button" 
+                      onClick={() => { setLyrics(''); setUploadStatus(''); }}
+                      className="text-white/40 hover:text-white font-bold cursor-pointer hover:underline text-[8px]"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3 pt-2">

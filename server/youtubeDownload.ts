@@ -39,68 +39,71 @@ export async function handleDownload(req: express.Request, res: express.Response
       .replace(/[\/\\:*?"<>|]/g, '') // remove illegal characters
       .trim() || 'audio';
 
+    // List of reliable public Cobalt API nodes to iterate over
+    const COBALT_MIRRORS = [
+      'https://api.cobalt.tools/api/json',
+      'https://cobalt.xyz/api/json',
+      'https://co.wuk.sh/api/json',
+      'https://cobalt-api.lule.io/api/json',
+      'https://api.disroot.org/cobalt/api/json'
+    ];
+
     // 1. ATTEMPT COBALT DOWNLOAD API FIRST (Extremely reliable, bypasses YouTube's server IP blocks)
-    try {
-      console.log(`[youtubeDownload] Attempting Cobalt conversion for URL: ${videoUrl}`);
-      const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: videoUrl,
-          audioFormat: 'mp3',
-          isAudioOnly: true,
-          audioBitrate: '192',
-        }),
-      });
+    for (const mirror of COBALT_MIRRORS) {
+      try {
+        console.log(`[youtubeDownload] Triaging Cobalt mirror: ${mirror} for URL: ${videoUrl}`);
+        const cobaltResponse = await fetch(mirror, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          },
+          body: JSON.stringify({
+            url: videoUrl,
+            downloadMode: 'audio',
+            isAudioOnly: true,
+            audioFormat: 'mp3',
+            audioBitrate: '192',
+          }),
+        });
 
-      if (cobaltResponse.ok) {
-        const data: any = await cobaltResponse.json();
-        console.log(`[youtubeDownload] Cobalt API status:`, data.status);
-        if ((data.status === 'stream' || data.status === 'redirect') && data.url) {
-          console.log(`[youtubeDownload] Streaming file from Cobalt converter link: ${data.url}`);
+        if (cobaltResponse.ok) {
+          const data: any = await cobaltResponse.json();
+          console.log(`[youtubeDownload] Cobalt mirror [${mirror}] returned status:`, data.status);
           
-          const audioStreamResponse = await fetch(data.url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-          });
-
-          if (audioStreamResponse.ok && audioStreamResponse.body) {
-            res.setHeader('Content-Type', 'audio/mpeg');
-            res.setHeader(
-              'Content-Disposition',
-              `attachment; filename*=UTF-8''${encodeURIComponent(filename)}.mp3`
-            );
-
-            const reader = audioStreamResponse.body.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) {
-                break;
-              }
-              res.write(value);
-            }
-            res.end();
-            console.log('[youtubeDownload] Successfully downloaded and streamed via Cobalt API!');
-            return;
+          if ((data.status === 'stream' || data.status === 'redirect' || data.status === 'tunnel') && data.url) {
+            console.log(`[youtubeDownload] Obtained conversion link: ${data.url}`);
+            
+            // To completely prevent Vercel node serverless 10-second timeout,
+            // we respond with a JSON payload containing the direct CDN redirect URL.
+            // This is 100% resilient and downloads at incredible speeds directly to the client browser.
+            return res.status(200).json({
+              success: true,
+              redirectUrl: data.url
+            });
           } else {
-            console.warn('[youtubeDownload] Cobalt converted url fetch failed:', audioStreamResponse.status);
+            console.warn(`[youtubeDownload] Mirror [${mirror}] returned status but no direct URL:`, data);
           }
         } else {
-          console.warn('[youtubeDownload] Cobalt returned unexpected or error payload:', data);
+          console.warn(`[youtubeDownload] Mirror [${mirror}] returned non-200 code:`, cobaltResponse.status);
         }
-      } else {
-        console.warn('[youtubeDownload] Cobalt endpoint returned connection code:', cobaltResponse.status);
+      } catch (mirrorErr: any) {
+        console.error(`[youtubeDownload] Mirror [${mirror}] connection failed:`, mirrorErr.message || mirrorErr);
       }
-    } catch (cobaltErr: any) {
-      console.error('[youtubeDownload] Cobalt helper conversion failed:', cobaltErr.message || cobaltErr);
     }
 
-    // 2. FALLBACK TO YTDL-CORE + FFMPEG (Original backup stream method)
-    console.log('[youtubeDownload] Proceeding with ytdl-core fallback...');
+    // 2. FALLBACK TO YTDL-CORE + FFMPEG (Only for local dev, will throw on Vercel but safe to keep)
+    console.log('[youtubeDownload] All Cobalt mirrors failed or timed out. Proceeding with ytdl-core local fallback...');
+    
+    // Check if we are running in a Vercel environment to warn user early of serverless restrictions
+    if (process.env.VERCEL === '1') {
+      return res.status(503).json({
+        success: false,
+        error: 'YouTube blocked download requests on Vercel server. Please try again in 5 seconds or search/play directly in browser! / يوتيوب حظر الاتصال المباشر من سيرفر فيرسيل. نرجو استخدام مشغل المتصفح المباشر.'
+      });
+    }
+
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader(
       'Content-Disposition',
@@ -128,7 +131,7 @@ export async function handleDownload(req: express.Request, res: express.Response
       if (!res.headersSent) {
         res.status(500).json({
           success: false,
-          error: `Error pulling stream from YouTube: ${err.message}`
+          error: `Bot detection / YouTube proxy restriction error: ${err.message}`
         });
       }
     });
@@ -145,7 +148,7 @@ export async function handleDownload(req: express.Request, res: express.Response
         if (!res.headersSent) {
           res.status(500).json({
             success: false,
-            error: `Conversion failed: ${err.message}`
+            error: `YouTube conversion blocked locally: ${err.message}`
           });
         }
       })
@@ -159,7 +162,7 @@ export async function handleDownload(req: express.Request, res: express.Response
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
-        error: error.message || 'An unexpected error occurred during downlaod'
+        error: error.message || 'An unexpected error occurred during download'
       });
     }
   }

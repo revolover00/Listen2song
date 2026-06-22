@@ -9,46 +9,45 @@ import { handleDownload } from "./server/youtubeDownload";
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
 dns.setDefaultResultOrder("ipv4first");
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  // Sliding-window in-memory rate limiter (15 requests per minute per IP for AI requests)
-  const ipLimits = new Map<string, { count: number; resetTime: number }>();
-  
-  const rateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown') as string;
-    const now = Date.now();
-    const limit = ipLimits.get(ip);
+// Sliding-window in-memory rate limiter (15 requests per minute per IP for AI requests)
+const ipLimits = new Map<string, { count: number; resetTime: number }>();
 
-    if (!limit || now > limit.resetTime) {
-      ipLimits.set(ip, {
-        count: 1,
-        resetTime: now + 60 * 1000
-      });
-      return next();
-    }
+const rateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown') as string;
+  const now = Date.now();
+  const limit = ipLimits.get(ip);
 
-    if (limit.count >= 15) {
-      console.warn(`[RateLimit] Blocked request from IP: ${ip}`);
-      return res.status(429).json({
-        success: false,
-        error: 'Too many requests. Limit is 15 per minute. / لقد تجاوزت حد الطلبات المسموح به (15 طلب في الدقيقة).'
-      });
-    }
+  if (!limit || now > limit.resetTime) {
+    ipLimits.set(ip, {
+      count: 1,
+      resetTime: now + 60 * 1000
+    });
+    return next();
+  }
 
-    limit.count++;
-    next();
-  };
+  if (limit.count >= 15) {
+    console.warn(`[RateLimit] Blocked request from IP: ${ip}`);
+    return res.status(429).json({
+      success: false,
+      error: 'Too many requests. Limit is 15 per minute. / لقد تجاوزت حد الطلبات المسموح به (15 طلب في الدقيقة).'
+    });
+  }
 
-  app.use(express.json({ limit: "20mb" }));
-  app.use(express.urlencoded({ limit: "20mb", extended: true }));
+  limit.count++;
+  next();
+};
 
-  // Logging middleware
-  app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    next();
-  });
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ limit: "20mb", extended: true }));
+
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
   // Endpoints for listen2song API
 
@@ -247,11 +246,15 @@ async function startServer() {
 
   // Serve with Vite in development, static files in production
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
+    import("vite").then(async (viteModule) => {
+      const vite = await viteModule.createServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    }).catch(err => {
+      console.error("Failed to dynamically load Vite:", err);
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -260,9 +263,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server successfully running on port http://localhost:${PORT}`);
-  });
-}
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server successfully running on port http://localhost:${PORT}`);
+    });
+  }
 
-startServer();
+  export default app;

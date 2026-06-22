@@ -1,5 +1,20 @@
 import React from 'react';
 import { Track } from '../../types';
+import { 
+  Home, 
+  Search, 
+  Music, 
+  Disc, 
+  User, 
+  Shuffle, 
+  UploadCloud, 
+  Youtube, 
+  Menu, 
+  SkipBack, 
+  SkipForward, 
+  Play, 
+  Pause 
+} from 'lucide-react';
 
 interface TopHeaderBarProps {
   currentTrack: Track | null;
@@ -25,14 +40,14 @@ export function TopHeaderBar({
   setIsSidebarOpen
 }: TopHeaderBarProps) {
   const navItems = [
-    { id: 'home', label: 'Home / الرئيسية', icon: 'fa-house' },
-    { id: 'search', label: 'Search / البحث', icon: 'fa-magnifying-glass' },
-    { id: 'songs', label: 'Songs / الأغاني', icon: 'fa-music' },
-    { id: 'albums', label: 'Albums / الألبومات', icon: 'fa-compact-disc' },
-    { id: 'artists', label: 'Artists / الفنانين', icon: 'fa-user-astronaut' },
-    { id: 'mix', label: 'Mix / مكس', icon: 'fa-shuffle' },
-    { id: 'upload', label: 'Upload / رفع ملفات', icon: 'fa-cloud-arrow-up' },
-    { id: 'youtube', label: 'YouTube / يوتيوب', icon: 'fa-brands fa-youtube' },
+    { id: 'home', label: 'Home / الرئيسية', IconComponent: Home },
+    { id: 'search', label: 'Search / البحث', IconComponent: Search },
+    { id: 'songs', label: 'Songs / الأغاني', IconComponent: Music },
+    { id: 'albums', label: 'Albums / الألبومات', IconComponent: Disc },
+    { id: 'artists', label: 'Artists / الفنانين', IconComponent: User },
+    { id: 'mix', label: 'Mix / مكس', IconComponent: Shuffle },
+    { id: 'upload', label: 'Upload / رفع ملفات', IconComponent: UploadCloud },
+    { id: 'youtube', label: 'YouTube / يوتيوب', IconComponent: Youtube },
   ];
 
   return (
@@ -42,14 +57,14 @@ export function TopHeaderBar({
       <div className="flex items-center gap-3 self-start md:self-auto select-none shrink-0">
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`cursor-pointer rounded-xl flex items-center justify-center transition-all duration-300 border ${
+          className={`cursor-pointer rounded-xl flex items-center justify-center transition-all duration-300 border p-2 ${
             isSidebarOpen 
-              ? 'w-9.5 h-9.5 bg-brand-purple border-brand-purple/20 text-white shadow-lg shadow-brand-purple/20 hover:brightness-110' 
-              : 'w-9.5 h-9.5 bg-white/5 border-white/10 text-white/50 hover:text-white hover:bg-white/10'
+              ? 'bg-brand-purple border-brand-purple/20 text-white shadow-lg shadow-brand-purple/20 hover:brightness-110' 
+              : 'bg-white/5 border-white/10 text-white/50 hover:text-white hover:bg-white/10'
           }`}
           title={isSidebarOpen ? "Collapse Sidebar / إغلاق الشريط الجانبي" : "Expand Sidebar / فتح الشريط الجانبي"}
         >
-          <i className="fa-solid fa-bars-staggered text-xs" />
+          <Menu className="h-4.5 w-4.5" />
         </button>
 
         <div className="flex flex-col">
@@ -66,10 +81,11 @@ export function TopHeaderBar({
       </div>
 
       {/* CENTER: Capsule Navigation Bar */}
-      <div className="flex justify-center items-center select-none w-full md:w-auto shrink-0">
+      <div className="flex justify-center items-center select-none w-full md:w-auto shrink-0 animate-fadeIn">
         <div className="bg-black/40 backdrop-blur-2xl border border-white/10 rounded-full p-1.5 flex items-center gap-1.5 sm:gap-2 md:gap-2.5 shadow-[0_12px_45px_rgba(0,0,0,0.7),inset_0_1px_1px_rgba(255,255,255,0.05)] transition-all duration-300">
           {navItems.map((item) => {
             const isActive = activeSection === item.id;
+            const Icon = item.IconComponent;
             return (
               <button
                 key={item.id}
@@ -82,8 +98,8 @@ export function TopHeaderBar({
                     : 'w-8.5 h-8.5 md:w-9.5 md:h-9.5 text-white/40 hover:text-white/85 hover:bg-white/5 hover:scale-105'
                 }`}
               >
-                <span className="text-[12px] md:text-sm">
-                  <i className={`fa-solid ${item.icon}`} />
+                <span className="p-1">
+                  <Icon className="h-4.5 w-4.5 md:h-5 md:w-5" />
                 </span>
 
                 {/* Ambient glow around active icon */}
@@ -132,16 +148,16 @@ export function TopHeaderBar({
             </div>
 
             {/* Quick Media controls */}
-            <div className="flex items-center gap-1 shrink-0 bg-black/35 rounded-xl p-0.5 border border-white/5">
+            <div className="flex items-center gap-1 shrink-0 bg-black/35 rounded-xl p-1 border border-white/5">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onPrev();
                 }}
-                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer text-[9px]"
+                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer p-0.5"
                 title="Prev / السابق"
               >
-                <i className="fa-solid fa-backward-step" />
+                <SkipBack className="h-3.5 w-3.5" />
               </button>
               
               <button
@@ -149,10 +165,10 @@ export function TopHeaderBar({
                   e.stopPropagation();
                   onPlayPauseToggle();
                 }}
-                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center bg-brand-purple hover:scale-105 active:scale-95 text-white shadow-md transition-all cursor-pointer text-[9px]"
+                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center bg-brand-purple hover:scale-105 active:scale-95 text-white shadow-md transition-all cursor-pointer p-0.5"
                 title={isPlaying ? 'Pause / إيقاف' : 'Play / تشغيل'}
               >
-                <i className={`fa-solid ${isPlaying ? 'fa-pause' : 'fa-play ml-0.5'}`} />
+                {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
               </button>
 
               <button
@@ -160,17 +176,17 @@ export function TopHeaderBar({
                   e.stopPropagation();
                   onNext();
                 }}
-                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer text-[9px]"
+                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer p-0.5"
                 title="Next / التالي"
               >
-                <i className="fa-solid fa-forward-step" />
+                <SkipForward className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
         ) : (
           <div className="w-full md:w-[240px] xl:w-[280px] bg-black/25 p-1.5 px-3 rounded-2xl flex items-center justify-center text-[9px] text-[#6c6c6c] uppercase tracking-wider border border-white/5 select-none h-10.5">
             <span className="flex items-center gap-1.5">
-              <i className="fa-solid fa-compact-disc animate-spin text-[10px] text-brand-purple" />
+              <Disc className="animate-spin text-[10px] text-brand-purple h-3.5 w-3.5" />
               Select Track to listen / اختر أغنية
             </span>
           </div>

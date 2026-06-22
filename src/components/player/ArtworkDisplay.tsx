@@ -1,5 +1,6 @@
 import React from 'react';
 import { Track } from '../../types';
+import { Disc, ChevronRight } from 'lucide-react';
 
 interface ArtworkDisplayProps {
   currentTrack: Track | null;
@@ -16,7 +17,7 @@ export function ArtworkDisplay({
     return (
       <div className="flex-1 h-[350px] md:h-full min-h-[300px] bg-neutral-900 rounded-3xl flex items-center justify-center border border-white/5">
         <div className="text-center text-white/40">
-          <i className="fa-solid fa-compact-disc text-5xl mb-3 animate-spin text-brand-purple" />
+          <Disc className="h-12 w-12 mb-3 animate-spin text-brand-purple mx-auto" />
           <p className="text-base font-semibold">No track selected</p>
           <p className="text-xs">Upload your own music tracks (MP3 or ZIP) to begin</p>
         </div>
@@ -111,14 +112,14 @@ export function ArtworkDisplay({
           className="absolute bottom-6 left-6 mx-0 max-w-[200px] md:max-w-[240px] glass-pill hover:bg-white/15 active:scale-95 text-white p-2.5 rounded-full flex items-center justify-between gap-3 transition-all cursor-pointer select-none group/pill pl-3 pr-4 shadow-lg"
           title={`Play next: ${upcomingTrack.title}`}
         >
-          <div className="flex items-center gap-2 overflow-hidden">
+          <div className="flex items-center gap-2 overflow-hidden bg-transparent">
             <img
               src={upcomingTrack.coverUrl}
               alt=""
               referrerPolicy="no-referrer"
               className="w-5 h-5 rounded-full object-cover bg-white/10 group-hover/pill:rotate-45 transition-transform"
             />
-            <div className="text-left overflow-hidden">
+            <div className="text-left overflow-hidden bg-transparent">
               <p className="text-[10px] font-bold text-white/95 line-clamp-1 leading-normal">
                 {upcomingTrack.title}
               </p>
@@ -127,8 +128,8 @@ export function ArtworkDisplay({
               </p>
             </div>
           </div>
-          <span className="text-[9px] font-bold uppercase text-brand-purple flex items-center shrink-0">
-            Next <i className="fa-solid fa-chevron-right ml-1 text-[8px]" />
+          <span className="text-[9px] font-bold uppercase text-brand-purple flex items-center shrink-0 bg-transparent">
+            Next <ChevronRight className="ml-1 h-3.5 w-3.5" />
           </span>
         </button>
       )}

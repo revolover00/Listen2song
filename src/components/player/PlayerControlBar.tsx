@@ -1,5 +1,19 @@
 import React from 'react';
 import { Track } from '../../types';
+import { 
+  Shuffle, 
+  SkipBack, 
+  Pause, 
+  Play, 
+  SkipForward, 
+  Repeat, 
+  VolumeX, 
+  Volume2, 
+  Radio, 
+  Youtube, 
+  Loader2, 
+  Download 
+} from 'lucide-react';
 
 interface PlayerControlBarProps {
   currentTrack: Track | null;
@@ -159,7 +173,7 @@ export function PlayerControlBar({
             }`}
             title="Shuffle"
           >
-            <i className="fa-solid fa-shuffle" />
+            <Shuffle className="h-4 w-4" />
           </button>
 
           {/* Previous button */}
@@ -168,16 +182,20 @@ export function PlayerControlBar({
             className="cursor-pointer text-xs text-white/50 hover:text-white h-7 w-7 rounded-full flex items-center justify-center hover:bg-white/5 transition-all"
             title="Previous"
           >
-            <i className="fa-solid fa-backward-step" />
+            <SkipBack className="h-4 w-4 fill-current" />
           </button>
 
           {/* Main Play/Pause Button */}
           <button
             onClick={onPlayPauseToggle}
-            className="cursor-pointer bg-white text-black h-10 w-10 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shrink-0"
+            className="cursor-pointer bg-white text-black h-10 w-10 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shrink-0 p-2.5"
             title={isPlaying ? 'Pause' : 'Play'}
           >
-            <i className={`fa-solid text-xs ${isPlaying ? 'fa-pause' : 'fa-play ml-0.5'}`} />
+            {isPlaying ? (
+              <Pause className="h-4 w-4 text-black fill-current" />
+            ) : (
+              <Play className="h-4 w-4 text-black fill-current ml-0.5" />
+            )}
           </button>
 
           {/* Next button */}
@@ -186,7 +204,7 @@ export function PlayerControlBar({
             className="cursor-pointer text-xs text-white/50 hover:text-white h-7 w-7 rounded-full flex items-center justify-center hover:bg-white/5 transition-all"
             title="Next"
           >
-            <i className="fa-solid fa-forward-step" />
+            <SkipForward className="h-4 w-4 fill-current" />
           </button>
 
           {/* Repeat button */}
@@ -197,7 +215,7 @@ export function PlayerControlBar({
             }`}
             title={`Repeat: ${isRepeat}`}
           >
-            <i className="fa-solid fa-repeat" />
+            <Repeat className="h-4 w-4" />
             {isRepeat === 'one' && (
               <span className="absolute bottom-1 right-1 text-[7px] font-black bg-brand-purple text-white rounded-full w-2.5 h-2.5 flex items-center justify-center scale-90">
                 1
@@ -234,10 +252,14 @@ export function PlayerControlBar({
       <div className="flex items-center justify-end gap-3 w-full md:w-1/4 shrink-0 pr-1">
         <button
           onClick={onMuteToggle}
-          className="cursor-pointer text-xs text-white/50 hover:text-white transition-colors"
+          className="cursor-pointer text-xs text-white/50 hover:text-white transition-colors flex items-center justify-center"
           title={isMuted ? 'Unmute' : 'Mute'}
         >
-          <i className={`fa-solid ${isMuted || volume === 0 ? 'fa-volume-xmark text-brand-purple' : 'fa-volume-high'}`} />
+          {isMuted || volume === 0 ? (
+            <VolumeX className="h-4 w-4 text-brand-purple" />
+          ) : (
+            <Volume2 className="h-4 w-4" />
+          )}
         </button>
 
         <input
@@ -255,10 +277,10 @@ export function PlayerControlBar({
         />
 
         <button
-          className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all ml-1"
+          className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all ml-1 flex items-center justify-center"
           title="AirPlay / Devices"
         >
-          <i className="fa-solid fa-circle-nodes" />
+          <Radio className="h-4 w-4" />
         </button>
 
         {currentTrack && (currentTrack.source === 'youtube' || currentTrack.id.startsWith('youtube-')) && (
@@ -268,17 +290,17 @@ export function PlayerControlBar({
               href={`https://www.youtube.com/watch?v=${currentTrack.youtubeId || currentTrack.audioUrl}`}
               target="_blank"
               rel="noreferrer"
-              className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all"
+              className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all flex items-center justify-center"
               title="Open on YouTube / فتح في يوتيوب"
             >
-              <i className="fa-brands fa-youtube" />
+              <Youtube className="h-4 w-4 text-red-500" />
             </a>
 
             {/* Downloader Button with active spinner feedback */}
             <button
               onClick={() => downloadSong(currentTrack)}
               disabled={downloadProgress !== null}
-              className={`cursor-pointer text-xs p-1.5 rounded-lg transition-all ${
+              className={`cursor-pointer text-xs p-1.5 rounded-lg transition-all flex items-center justify-center ${
                 downloadProgress !== null
                   ? 'text-brand-purple bg-brand-purple/10 cursor-not-allowed animate-pulse'
                   : 'text-white/50 hover:text-white hover:bg-white/5'
@@ -291,9 +313,9 @@ export function PlayerControlBar({
                   : 'تحميل الأغنية كـ MP3 / Download MP3'
               }
             >
-              {downloadProgress === 'preparing' && <i className="fa-solid fa-spinner fa-spin text-brand-purple" />}
-              {downloadProgress === 'saving' && <i className="fa-solid fa-circle-notch fa-spin text-brand-purple" />}
-              {downloadProgress === null && <i className="fa-solid fa-download" />}
+              {downloadProgress === 'preparing' && <Loader2 className="h-4 w-4 animate-spin text-brand-purple" />}
+              {downloadProgress === 'saving' && <Loader2 className="h-4 w-4 animate-spin text-brand-purple" />}
+              {downloadProgress === null && <Download className="h-4 w-4" />}
             </button>
           </div>
         )}
