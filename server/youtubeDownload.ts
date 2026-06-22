@@ -39,11 +39,72 @@ export async function handleDownload(req: express.Request, res: express.Response
       .replace(/[\/\\:*?"<>|]/g, '') // remove illegal characters
       .trim() || 'audio';
 
+    // 1. ATTEMPT COBALT DOWNLOAD API FIRST (Extremely reliable, bypasses YouTube's server IP blocks)
+    try {
+      console.log(`[youtubeDownload] Attempting Cobalt conversion for URL: ${videoUrl}`);
+      const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: videoUrl,
+          audioFormat: 'mp3',
+          isAudioOnly: true,
+          audioBitrate: '192',
+        }),
+      });
+
+      if (cobaltResponse.ok) {
+        const data: any = await cobaltResponse.json();
+        console.log(`[youtubeDownload] Cobalt API status:`, data.status);
+        if ((data.status === 'stream' || data.status === 'redirect') && data.url) {
+          console.log(`[youtubeDownload] Streaming file from Cobalt converter link: ${data.url}`);
+          
+          const audioStreamResponse = await fetch(data.url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+          });
+
+          if (audioStreamResponse.ok && audioStreamResponse.body) {
+            res.setHeader('Content-Type', 'audio/mpeg');
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename*=UTF-8''${encodeURIComponent(filename)}.mp3`
+            );
+
+            const reader = audioStreamResponse.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) {
+                break;
+              }
+              res.write(value);
+            }
+            res.end();
+            console.log('[youtubeDownload] Successfully downloaded and streamed via Cobalt API!');
+            return;
+          } else {
+            console.warn('[youtubeDownload] Cobalt converted url fetch failed:', audioStreamResponse.status);
+          }
+        } else {
+          console.warn('[youtubeDownload] Cobalt returned unexpected or error payload:', data);
+        }
+      } else {
+        console.warn('[youtubeDownload] Cobalt endpoint returned connection code:', cobaltResponse.status);
+      }
+    } catch (cobaltErr: any) {
+      console.error('[youtubeDownload] Cobalt helper conversion failed:', cobaltErr.message || cobaltErr);
+    }
+
+    // 2. FALLBACK TO YTDL-CORE + FFMPEG (Original backup stream method)
+    console.log('[youtubeDownload] Proceeding with ytdl-core fallback...');
     res.setHeader('Content-Type', 'audio/mpeg');
-    // Using content-disposition to prompt file download with exact filename
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(filename)}.mp3"`
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}.mp3`
     );
 
     // Get the audio stream from YouTube
