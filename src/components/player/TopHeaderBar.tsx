@@ -13,7 +13,8 @@ import {
   SkipBack, 
   SkipForward, 
   Play, 
-  Pause 
+  Pause,
+  Minimize2
 } from 'lucide-react';
 
 interface TopHeaderBarProps {
@@ -26,6 +27,7 @@ interface TopHeaderBarProps {
   setActiveSection: (sec: string) => void;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (open: boolean) => void;
+  onMiniToggle?: () => void;
 }
 
 export function TopHeaderBar({
@@ -37,7 +39,8 @@ export function TopHeaderBar({
   activeSection,
   setActiveSection,
   isSidebarOpen,
-  setIsSidebarOpen
+  setIsSidebarOpen,
+  onMiniToggle
 }: TopHeaderBarProps) {
   const navItems = [
     { id: 'home', label: 'Home / الرئيسية', IconComponent: Home },
@@ -181,6 +184,19 @@ export function TopHeaderBar({
               >
                 <SkipForward className="h-3.5 w-3.5" />
               </button>
+
+              {onMiniToggle && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMiniToggle();
+                  }}
+                  className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-brand-purple hover:bg-white/5 transition-all cursor-pointer p-0.5 border border-transparent hover:border-brand-purple/10"
+                  title="Mini Player / المشغل المصغر"
+                >
+                  <Minimize2 className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
         ) : (

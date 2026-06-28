@@ -14,6 +14,7 @@ import { LibraryView } from './components/player/LibraryView';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { ToastMessage, Track, Playlist } from './types';
 import { EditTrackModal } from './components/player/EditTrackModal';
+import { MiniPlayer } from './components/player/MiniPlayer';
 
 export default function App() {
   const [activeSection, setActiveSection] = useState('home');
@@ -21,6 +22,7 @@ export default function App() {
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMiniPlayer, setIsMiniPlayer] = useState(false);
 
   // Core Hooks State
   const {
@@ -157,127 +159,166 @@ export default function App() {
       </div>
 
       {/* Container holding the high fidelity music board */}
-      <div className="w-full h-full text-white flex flex-col md:flex-row overflow-hidden relative z-10 transition-all duration-300">
-        
-        {/* Left Side: Simplified stacked songs list library, viewable across all sections when active */}
-        {isSidebarOpen && (
-          <div className="hidden md:flex md:flex-shrink-0 md:h-full animate-fadeIn">
-            <Sidebar
-              tracks={tracks}
-              currentTrackId={player.currentTrack?.id || null}
-              onSelectTrack={player.selectTrack}
-              onDeleteTrack={onDeleteTrackWithFeedback}
-              onEditTrack={(track) => setEditingTrack(track)}
-            />
+      {isMiniPlayer ? (
+        <div className="w-full h-full text-white flex flex-col items-center justify-center relative z-10 p-6 animate-fadeIn select-none">
+          <div className="text-center max-w-sm mt-[-10vh] border border-white/5 bg-black/45 backdrop-blur-3xl px-6 py-4.5 rounded-3xl shadow-2xl">
+            <p className="text-sm font-black tracking-[0.2em] text-brand-purple leading-tight uppercase mb-1">
+              Ambient Mini Mode
+            </p>
+            <p className="text-[10px] text-[#8a8a8a] leading-relaxed">
+              Draggable mini controller active. Enjoy full synchronized audio with a neat, focused footprint.
+            </p>
           </div>
-        )}
-
-
-        {/* Right Side: Primary Content Frame with interactive Top Bar */}
-        <div className="flex-1 flex flex-col justify-between overflow-hidden p-3 md:p-6 gap-3 md:gap-6">
-          
-          {/* Top Header Bar containing the integrated Mini Player Box (مربع تشغيل الأغاني) & Sidebar controls */}
-          <TopHeaderBar
+          <MiniPlayer
             currentTrack={player.currentTrack}
             isPlaying={player.isPlaying}
+            currentTime={player.currentTime}
+            duration={player.duration}
+            volume={player.volume}
+            isMuted={player.isMuted}
             onPlayPauseToggle={player.togglePlay}
             onNext={player.next}
             onPrev={player.prev}
-            activeSection={activeSection}
-            setActiveSection={setActiveSection}
-            isSidebarOpen={isSidebarOpen}
-            setIsSidebarOpen={setIsSidebarOpen}
+            onSeek={player.seekTo}
+            onVolumeChange={player.setVolume}
+            onMuteToggle={player.toggleMute}
+            onRestore={() => {
+              setIsMiniPlayer(false);
+              addToast('Returned to full experience / تم استعادة المشغل الكامل', 'success');
+            }}
           />
-
-          <div className="flex-1 flex flex-col md:flex-row items-center gap-6 overflow-hidden">
-            
-            {/* View router switcher */}
-            {activeSection === 'home' && (
-              <>
-                <ArtworkDisplay
-                  currentTrack={player.currentTrack}
-                  upcomingTrack={player.upcomingTrack}
-                  onNextTrackClick={player.next}
-                />
-                <LyricsWindow
-                  currentTrack={player.currentTrack}
-                  currentTime={player.currentTime}
-                  onToast={addToast}
-                  onEditCurrentTrack={() => player.currentTrack && setEditingTrack(player.currentTrack)}
-                />
-              </>
-            )}
-
-            {activeSection === 'upload' && (
-              <UploadZone
-                onMp3Upload={onMp3Files}
-                onZipUpload={onZipFile}
-                isProcessing={isUploading}
-                processProgress={uploadProgress}
-              />
-            )}
-
-            {activeSection === 'search' && (
-              <SearchView
+        </div>
+      ) : (
+        <div className="w-full h-full text-white flex flex-col md:flex-row overflow-hidden relative z-10 transition-all duration-300">
+          
+          {/* Left Side: Simplified stacked songs list library, viewable across all sections when active */}
+          {isSidebarOpen && (
+            <div className="hidden md:flex md:flex-shrink-0 md:h-full animate-fadeIn">
+              <Sidebar
                 tracks={tracks}
-                onSelectTrack={player.selectTrack}
                 currentTrackId={player.currentTrack?.id || null}
-                onDeleteTrack={onDeleteTrackWithFeedback}
-              />
-            )}
-
-            {activeSection === 'youtube' && (
-              <YouTubeSearchView
                 onSelectTrack={player.selectTrack}
-                currentTrackId={player.currentTrack?.id || null}
-                addTrack={addTrack}
-                updateTrackLyrics={updateTrackLyrics}
-                addToast={addToast}
-              />
-            )}
-
-            {(activeSection === 'albums' || activeSection === 'artists' || activeSection === 'mix' || activeSection === 'songs') && (
-              <LibraryView
-                tracks={tracks}
-                viewType={activeSection as 'albums' | 'artists' | 'mix' | 'songs'}
-                setViewType={(view) => {
-                  setActiveSection(view);
-                  setActivePlaylistId(null);
-                }}
-                onSelectTrack={player.selectTrack}
-                currentTrackId={player.currentTrack?.id || null}
                 onDeleteTrack={onDeleteTrackWithFeedback}
                 onEditTrack={(track) => setEditingTrack(track)}
               />
-            )}
+            </div>
+          )}
 
-          </div>
 
-          {/* Bottom controls panel component */}
-          <div className="flex-shrink-0">
-            <PlayerControlBar
+          {/* Right Side: Primary Content Frame with interactive Top Bar */}
+          <div className="flex-1 flex flex-col justify-between overflow-hidden p-3 md:p-6 gap-3 md:gap-6">
+            
+            {/* Top Header Bar containing the integrated Mini Player Box (مربع تشغيل الأغاني) & Sidebar controls */}
+            <TopHeaderBar
               currentTrack={player.currentTrack}
               isPlaying={player.isPlaying}
-              currentTime={player.currentTime}
-              duration={player.duration}
-              volume={player.volume}
-              isMuted={player.isMuted}
-              isShuffle={player.isShuffle}
-              isRepeat={player.isRepeat}
               onPlayPauseToggle={player.togglePlay}
               onNext={player.next}
               onPrev={player.prev}
-              onSeek={player.seekTo}
-              onVolumeChange={player.setVolume}
-              onMuteToggle={player.toggleMute}
-              onShuffleToggle={player.toggleShuffle}
-              onRepeatToggle={player.toggleRepeat}
-              onToast={addToast}
+              activeSection={activeSection}
+              setActiveSection={setActiveSection}
+              isSidebarOpen={isSidebarOpen}
+              setIsSidebarOpen={setIsSidebarOpen}
+              onMiniToggle={() => {
+                setIsMiniPlayer(true);
+                addToast('Switched to Mini Player / تم الانتقال للوضع المصغر', 'info');
+              }}
             />
-          </div>
-        </div>
 
-      </div>
+            <div className="flex-1 flex flex-col md:flex-row items-center gap-6 overflow-hidden">
+              
+              {/* View router switcher */}
+              {activeSection === 'home' && (
+                <>
+                  <ArtworkDisplay
+                    currentTrack={player.currentTrack}
+                    upcomingTrack={player.upcomingTrack}
+                    onNextTrackClick={player.next}
+                  />
+                  <LyricsWindow
+                    currentTrack={player.currentTrack}
+                    currentTime={player.currentTime}
+                    onToast={addToast}
+                    onEditCurrentTrack={() => player.currentTrack && setEditingTrack(player.currentTrack)}
+                  />
+                </>
+              )}
+
+              {activeSection === 'upload' && (
+                <UploadZone
+                  onMp3Upload={onMp3Files}
+                  onZipUpload={onZipFile}
+                  isProcessing={isUploading}
+                  processProgress={uploadProgress}
+                />
+              )}
+
+              {activeSection === 'search' && (
+                <SearchView
+                  tracks={tracks}
+                  onSelectTrack={player.selectTrack}
+                  currentTrackId={player.currentTrack?.id || null}
+                  onDeleteTrack={onDeleteTrackWithFeedback}
+                />
+              )}
+
+              {activeSection === 'youtube' && (
+                <YouTubeSearchView
+                  onSelectTrack={player.selectTrack}
+                  currentTrackId={player.currentTrack?.id || null}
+                  addTrack={addTrack}
+                  updateTrackLyrics={updateTrackLyrics}
+                  addToast={addToast}
+                />
+              )}
+
+              {(activeSection === 'albums' || activeSection === 'artists' || activeSection === 'mix' || activeSection === 'songs') && (
+                <LibraryView
+                  tracks={tracks}
+                  viewType={activeSection as 'albums' | 'artists' | 'mix' | 'songs'}
+                  setViewType={(view) => {
+                    setActiveSection(view);
+                    setActivePlaylistId(null);
+                  }}
+                  onSelectTrack={player.selectTrack}
+                  currentTrackId={player.currentTrack?.id || null}
+                  onDeleteTrack={onDeleteTrackWithFeedback}
+                  onEditTrack={(track) => setEditingTrack(track)}
+                />
+              )}
+
+            </div>
+
+            {/* Bottom controls panel component */}
+            <div className="flex-shrink-0">
+              <PlayerControlBar
+                currentTrack={player.currentTrack}
+                isPlaying={player.isPlaying}
+                currentTime={player.currentTime}
+                duration={player.duration}
+                volume={player.volume}
+                isMuted={player.isMuted}
+                isShuffle={player.isShuffle}
+                isRepeat={player.isRepeat}
+                onPlayPauseToggle={player.togglePlay}
+                onNext={player.next}
+                onPrev={player.prev}
+                onSeek={player.seekTo}
+                onVolumeChange={player.setVolume}
+                onMuteToggle={player.toggleMute}
+                onShuffleToggle={player.toggleShuffle}
+                onRepeatToggle={player.toggleRepeat}
+                onMiniToggle={() => {
+                  setIsMiniPlayer(true);
+                  addToast('Switched to Mini Player / تم الانتقال للوضع المصغر', 'info');
+                }}
+                onToast={addToast}
+              />
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {editingTrack && (
         <EditTrackModal

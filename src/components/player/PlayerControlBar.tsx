@@ -12,7 +12,8 @@ import {
   Radio, 
   Youtube, 
   Loader2, 
-  Download 
+  Download,
+  Minimize2
 } from 'lucide-react';
 
 interface PlayerControlBarProps {
@@ -32,6 +33,7 @@ interface PlayerControlBarProps {
   onMuteToggle: () => void;
   onShuffleToggle: () => void;
   onRepeatToggle: () => void;
+  onMiniToggle?: () => void;
   onToast?: (message: string, type: 'success' | 'info' | 'error') => void;
 }
 
@@ -52,6 +54,7 @@ export function PlayerControlBar({
   onMuteToggle,
   onShuffleToggle,
   onRepeatToggle,
+  onMiniToggle,
   onToast
 }: PlayerControlBarProps) {
 
@@ -282,6 +285,16 @@ export function PlayerControlBar({
         >
           <Radio className="h-4 w-4" />
         </button>
+
+        {onMiniToggle && (
+          <button
+            onClick={onMiniToggle}
+            className="cursor-pointer text-xs text-white/50 hover:text-brand-purple hover:bg-brand-purple/10 p-1.5 rounded-lg transition-all ml-1 flex items-center justify-center border border-transparent hover:border-brand-purple/15"
+            title="Mini Player Mode / وضع المشغل المصغر"
+          >
+            <Minimize2 className="h-4 w-4" />
+          </button>
+        )}
 
         {currentTrack && (currentTrack.source === 'youtube' || currentTrack.id.startsWith('youtube-')) && (
           <div className="flex items-center gap-1">
