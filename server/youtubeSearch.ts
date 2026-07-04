@@ -69,54 +69,112 @@ async function fetchWithTimeout(url: string, options: any = {}, timeoutMs = 3000
 }
 
 /**
- * Queries a list of public Invidious API search endpoints to fetch YouTube videos without getting blocked
+ * Fetch search results from a single Invidious instance.
+ */
+async function searchSingleInvidious(instance: string, query: string): Promise<YouTubeVideo[]> {
+  const url = `https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+  console.log(`[YouTubeSearch] Raced fetch launched for instance: ${instance}`);
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    },
+    2500 // 2.5s limit per query to keep things extremely responsive
+  );
+
+  if (!response.ok) {
+    throw new Error(`Instance ${instance} returned status ${response.status}`);
+  }
+
+  const items = await response.json();
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error(`Instance ${instance} returned empty or invalid results`);
+  }
+
+  const videos: YouTubeVideo[] = items
+    .filter((item: any) => item.type === 'video' && item.videoId)
+    .map((item: any) => {
+      const seconds = item.lengthSeconds || 0;
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+      return {
+        videoId: item.videoId,
+        title: item.title || "Unknown Track",
+        channelName: item.author || "Unknown Artist",
+        thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
+        duration
+      };
+    });
+
+  if (videos.length === 0) {
+    throw new Error(`Instance ${instance} returned 0 valid video items`);
+  }
+
+  console.log(`[YouTubeSearch] Instance [${instance}] WON the search race with ${videos.length} results!`);
+  return videos;
+}
+
+/**
+ * Queries a list of public Invidious API search endpoints IN PARALLEL to fetch YouTube videos
+ * without getting blocked or triggering Vercel 10s Serverless timeouts.
  */
 async function searchYouTubeViaInvidious(query: string): Promise<YouTubeVideo[]> {
-  for (const instance of INVIDIOUS_INSTANCES) {
-    try {
-      console.log(`[YouTubeSearch] Trying Invidious fallback on: https://${instance}`);
-      const response = await fetchWithTimeout(
-        `https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`,
-        {
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        },
-        3000
-      );
+  const activeInstances = [
+    "yewtu.be",
+    "invidious.flokinet.to",
+    "iv.melmac.space",
+    "invidious.projectsegfaut.im",
+    "invidious.nerdvpn.de",
+    "invidious.perennialte.ch",
+    "invidio.xamh.de",
+    "iv.ggtyler.dev",
+    "invidious.lunar.icu",
+    "invidious.no-logs.com",
+    "inv.tux.im"
+  ];
 
-      if (response.ok) {
-        const items = await response.json();
-        if (Array.isArray(items) && items.length > 0) {
-          const videos: YouTubeVideo[] = items
-            .filter((item: any) => item.type === 'video' && item.videoId)
-            .map((item: any) => {
-              const seconds = item.lengthSeconds || 0;
-              const m = Math.floor(seconds / 60);
-              const s = Math.floor(seconds % 60);
-              const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
-              return {
-                videoId: item.videoId,
-                title: item.title || "Unknown Track",
-                channelName: item.author || "Unknown Artist",
-                thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
-                duration
-              };
-            });
-          
-          if (videos.length > 0) {
-            console.log(`[YouTubeSearch] Invidious instance [${instance}] successfully returned ${videos.length} results.`);
-            return videos.slice(0, 20);
-          }
-        }
+  console.log(`[YouTubeSearch] Starting parallel search race across ${activeInstances.length} Invidious instances...`);
+
+  return new Promise<YouTubeVideo[]>((resolve) => {
+    let resolved = false;
+    let failedCount = 0;
+    const errors: string[] = [];
+
+    // Safety timeout of 4.5 seconds to ensure Vercel never times out
+    const safetyTimeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.warn("[YouTubeSearch] Parallel Invidious race timed out at 4.5s.");
+        resolve([]);
       }
-    } catch (e: any) {
-      console.warn(`[YouTubeSearch] Invidious instance [${instance}] connection failed or timed out:`, e.message || e);
-    }
-  }
-  console.warn('[YouTubeSearch] All Invidious fallback instances failed.');
-  return [];
+    }, 4500);
+
+    activeInstances.forEach((instance) => {
+      searchSingleInvidious(instance, query)
+        .then((results) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(safetyTimeout);
+            resolve(results);
+          }
+        })
+        .catch((err: any) => {
+          failedCount++;
+          errors.push(`${instance}: ${err.message || err}`);
+          if (failedCount === activeInstances.length && !resolved) {
+            resolved = true;
+            clearTimeout(safetyTimeout);
+            console.error("[YouTubeSearch] All Invidious instances in the parallel race failed:", errors.join(" | "));
+            resolve([]);
+          }
+        });
+    });
+  });
 }
 
 /**
