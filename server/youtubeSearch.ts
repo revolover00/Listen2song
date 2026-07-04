@@ -1,9 +1,96 @@
+import { GoogleGenAI, Type } from "@google/genai";
+
 interface YouTubeVideo {
   videoId: string;
   title: string;
   channelName: string;
   thumbnail: string;
   duration: string;
+}
+
+let aiClient: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI | null {
+  if (!aiClient) {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      console.warn("[YouTubeSearch] GEMINI_API_KEY is not configured.");
+      return null;
+    }
+    aiClient = new GoogleGenAI({
+      apiKey: key,
+      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+    });
+  }
+  return aiClient;
+}
+
+async function searchYouTubeViaGemini(query: string): Promise<YouTubeVideo[]> {
+  const client = getAiClient();
+  if (!client) return [];
+
+  try {
+    console.log(`[YouTubeSearch] Directing search grounding via Gemini 3.5 for: "${query}"`);
+    const systemInstruction = `You are a specialized YouTube search assistant. Your job is to search Google/YouTube using your googleSearch tool for the query and extract a list of real, valid YouTube videos. 
+Ensure you return only real YouTube videoIds. Match videoIds like "dQw4w9WgXcQ" from actual YouTube URLs in your search results. Do not hallucinate or guess. Keep the durations realistic.`;
+
+    const response = await client.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: `Search YouTube for: "${query}". Return the top 10 relevant videos with real video IDs.`,
+      config: {
+        systemInstruction,
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              videoId: { type: Type.STRING, description: "The exact 11-character YouTube video ID" },
+              title: { type: Type.STRING, description: "The video title" },
+              channelName: { type: Type.STRING, description: "The channel/uploader name" },
+              thumbnail: { type: Type.STRING, description: "The thumbnail URL" },
+              duration: { type: Type.STRING, description: "The video duration in MM:SS format" }
+            },
+            required: ["videoId", "title", "channelName", "thumbnail", "duration"]
+          }
+        }
+      }
+    });
+
+    if (response.text) {
+      const results = JSON.parse(response.text.trim());
+      if (Array.isArray(results) && results.length > 0) {
+        const sanitized = results.map((item: any) => {
+          let videoId = item.videoId || "";
+          if (videoId.includes("youtube.com") || videoId.includes("youtu.be")) {
+            try {
+              const urlObj = new URL(videoId.startsWith("http") ? videoId : `https://${videoId}`);
+              videoId = urlObj.searchParams.get("v") || urlObj.pathname.split("/").pop() || videoId;
+            } catch (e) {
+              // Ignore parser error
+            }
+          }
+          videoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 11);
+          return {
+            videoId,
+            title: item.title || "Unknown Track",
+            channelName: item.channelName || "Unknown Artist",
+            thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : (item.thumbnail || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17"),
+            duration: item.duration || "3:00"
+          };
+        }).filter((item: any) => item.videoId && item.videoId.length === 11);
+
+        if (sanitized.length > 0) {
+          console.log(`[YouTubeSearch] Gemini search grounding successfully returned ${sanitized.length} high-fidelity results!`);
+          return sanitized;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("[YouTubeSearch] Gemini search grounding failed:", err.message || err);
+  }
+  return [];
 }
 
 /**
@@ -182,6 +269,16 @@ async function searchYouTubeViaInvidious(query: string): Promise<YouTubeVideo[]>
  * of ytInitialData (no API key required).
  */
 export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo[]> {
+  // Tier 1: Try Gemini Search Grounding first (highly reliable on Vercel/Cloud Run)
+  try {
+    const geminiResults = await searchYouTubeViaGemini(query);
+    if (geminiResults && geminiResults.length > 0) {
+      return geminiResults;
+    }
+  } catch (err: any) {
+    console.error("[YouTubeSearch] searchYouTubeViaGemini failed, falling back to scraper:", err.message || err);
+  }
+
   try {
     // No sp filters to ensure maximum broad relevance / search is "محرية"
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
