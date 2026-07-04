@@ -28,15 +28,15 @@ interface SearchResult {
   duration: string;
 }
 
-// 100% Reliable Client-Side Direct Search utilizing CORS-friendly Invidious instances
-async function searchInvidiousClientSide(query: string): Promise<SearchResult[]> {
-  const instances = [
+// 100% Reliable Client-Side Direct Search racing both CORS-friendly Piped and Invidious instances
+async function searchYouTubeDirectClientSide(query: string): Promise<SearchResult[]> {
+  const invidiousInstances = [
     "yewtu.be",
     "invidious.flokinet.to",
     "iv.melmac.space",
     "invidious.projectsegfaut.im",
-    "invidious.nerdvpn.de",
     "invidious.perennialte.ch",
+    "invidious.nerdvpn.de",
     "invidio.xamh.de",
     "iv.ggtyler.dev",
     "invidious.lunar.icu",
@@ -44,26 +44,80 @@ async function searchInvidiousClientSide(query: string): Promise<SearchResult[]>
     "inv.tux.im"
   ];
 
-  console.log(`[YouTubeSearchView] Running direct browser search on ${instances.length} Invidious instances...`);
+  const pipedInstances = [
+    "pipedapi.kavin.rocks",
+    "pipedapi.tokhmi.xyz",
+    "api.piped.yt",
+    "piped-api.lule.io",
+    "pipedapi.adminforge.de",
+    "pipedapi.astphy.com",
+    "pipedapi.swg.rocks",
+    "pipedapi.colby.school",
+    "pipedapi.us.to",
+    "pipedapi.r4fo.com"
+  ];
+
+  const totalCount = invidiousInstances.length + pipedInstances.length;
+  console.log(`[YouTubeSearchView] Running ultra-fast direct search race across ${totalCount} public endpoints...`);
 
   return new Promise<SearchResult[]>((resolve) => {
     let resolved = false;
-    let failedCount = 0;
+    let finishedCount = 0;
     const controllers: AbortController[] = [];
 
-    // Safety timeout of 3.5 seconds to ensure ultra responsive UI
+    // Safety timeout of 4.5 seconds to ensure fast UI response under any network status
     const safetyTimeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
         controllers.forEach(c => {
           try { c.abort(); } catch (e) {}
         });
-        console.warn("[YouTubeSearchView] Browser direct search race timed out.");
+        console.warn("[YouTubeSearchView] Client-side search race timed out.");
         resolve([]);
       }
-    }, 3500);
+    }, 4500);
 
-    instances.forEach((instance) => {
+    const handleSuccess = (results: SearchResult[], instance: string, type: 'Piped' | 'Invidious') => {
+      if (results.length > 0 && !resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        controllers.forEach(c => {
+          try { c.abort(); } catch (e) {}
+        });
+        console.log(`[YouTubeSearchView] Client direct search race WON by [${type}: ${instance}] with ${results.length} results!`);
+        resolve(results);
+      }
+    };
+
+    const handleFailure = () => {
+      finishedCount++;
+      if (finishedCount === totalCount && !resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        resolve([]);
+      }
+    };
+
+    // Helper to extract video ID
+    const parseVideoId = (item: any): string | null => {
+      if (item.videoId && item.videoId.length === 11) return item.videoId;
+      if (item.id && item.id.length === 11) return item.id;
+      if (item.url) {
+        const match = item.url.match(/[?&]v=([^&#]+)/) || item.url.match(/watch\?v=([^&#]+)/);
+        if (match && match[1]) {
+          return match[1].slice(0, 11);
+        }
+        const parts = item.url.split('/');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.length === 11) {
+          return lastPart;
+        }
+      }
+      return null;
+    };
+
+    // 1. Launch Invidious instances
+    invidiousInstances.forEach((instance) => {
       const controller = new AbortController();
       controllers.push(controller);
 
@@ -74,43 +128,81 @@ async function searchInvidiousClientSide(query: string): Promise<SearchResult[]>
         }
       })
       .then(async (res) => {
-        if (!res.ok) throw new Error(`Status ${res.status}`);
+        if (!res.ok) throw new Error();
         const items = await res.json();
         if (Array.isArray(items) && items.length > 0) {
           const results: SearchResult[] = items
-            .filter((item: any) => item.type === 'video' && item.videoId)
+            .filter((item: any) => item.type === 'video' && parseVideoId(item))
             .map((item: any) => {
+              const videoId = parseVideoId(item) || "";
               const seconds = item.lengthSeconds || 0;
               const m = Math.floor(seconds / 60);
               const s = Math.floor(seconds % 60);
               const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
               return {
-                videoId: item.videoId,
+                videoId,
                 title: item.title || "Unknown Track",
                 channelName: item.author || "Unknown Artist",
-                thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
+                thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
                 duration
               };
             });
 
-          if (results.length > 0 && !resolved) {
-            resolved = true;
-            clearTimeout(safetyTimeout);
-            controllers.forEach(c => {
-              try { c.abort(); } catch (e) {}
-            });
-            console.log(`[YouTubeSearchView] Browser direct search won by instance [${instance}] with ${results.length} results!`);
-            resolve(results);
+          if (results.length > 0) {
+            handleSuccess(results, instance, 'Invidious');
+          } else {
+            throw new Error();
           }
+        } else {
+          throw new Error();
         }
       })
       .catch(() => {
-        failedCount++;
-        if (failedCount === instances.length && !resolved) {
-          resolved = true;
-          clearTimeout(safetyTimeout);
-          resolve([]);
+        handleFailure();
+      });
+    });
+
+    // 2. Launch Piped instances (which specifically support client-side CORS)
+    pipedInstances.forEach((instance) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+
+      fetch(`https://${instance}/search?q=${encodeURIComponent(query)}&filter=videos`, {
+        signal: controller.signal
+      })
+      .then(async (res) => {
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const items = data.items;
+        if (Array.isArray(items) && items.length > 0) {
+          const results: SearchResult[] = items
+            .filter((item: any) => (item.type === 'stream' || item.type === 'video') && parseVideoId(item))
+            .map((item: any) => {
+              const videoId = parseVideoId(item) || "";
+              const seconds = item.duration || 0;
+              const m = Math.floor(seconds / 60);
+              const s = Math.floor(seconds % 60);
+              const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+              return {
+                videoId,
+                title: item.title || "Unknown Track",
+                channelName: item.uploaderName || item.channelName || "Unknown Artist",
+                thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+                duration
+              };
+            });
+
+          if (results.length > 0) {
+            handleSuccess(results, instance, 'Piped');
+          } else {
+            throw new Error();
+          }
+        } else {
+          throw new Error();
         }
+      })
+      .catch(() => {
+        handleFailure();
       });
     });
   });
@@ -226,7 +318,7 @@ export function YouTubeSearchView({
         
         // 1. Try direct browser search first (100% resilient and fast)
         try {
-          const direct = await searchInvidiousClientSide(randomQuery);
+          const direct = await searchYouTubeDirectClientSide(randomQuery);
           if (direct && direct.length > 0) {
             searchResults = direct;
           }
@@ -300,7 +392,7 @@ export function YouTubeSearchView({
 
       // 1. Try direct browser search first (100% resilient and fast, bypasses server blocks)
       try {
-        const direct = await searchInvidiousClientSide(activeQuery);
+        const direct = await searchYouTubeDirectClientSide(activeQuery);
         if (direct && direct.length > 0) {
           searchResults = direct;
         }

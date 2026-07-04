@@ -206,60 +206,153 @@ async function searchSingleInvidious(instance: string, query: string): Promise<Y
   return videos;
 }
 
+function parseVideoId(item: any): string | null {
+  if (item.videoId && item.videoId.length === 11) return item.videoId;
+  if (item.id && item.id.length === 11) return item.id;
+  if (item.url) {
+    const match = item.url.match(/[?&]v=([^&#]+)/) || item.url.match(/watch\?v=([^&#]+)/);
+    if (match && match[1]) {
+      return match[1].slice(0, 11);
+    }
+    const parts = item.url.split('/');
+    const lastPart = parts[parts.length - 1];
+    if (lastPart && lastPart.length === 11) {
+      return lastPart;
+    }
+  }
+  return null;
+}
+
 /**
- * Queries a list of public Invidious API search endpoints IN PARALLEL to fetch YouTube videos
+ * Fetch search results from a single Piped instance.
+ */
+async function searchSinglePiped(instance: string, query: string): Promise<YouTubeVideo[]> {
+  const url = `https://${instance}/search?q=${encodeURIComponent(query)}&filter=videos`;
+  console.log(`[YouTubeSearch] Raced fetch launched for Piped instance: ${instance}`);
+
+  const response = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    },
+    2500 // 2.5s limit per query to keep things extremely responsive
+  );
+
+  if (!response.ok) {
+    throw new Error(`Instance ${instance} returned status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const items = data.items;
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error(`Instance ${instance} returned empty or invalid results`);
+  }
+
+  const videos: YouTubeVideo[] = items
+    .filter((item: any) => (item.type === 'stream' || item.type === 'video') && parseVideoId(item))
+    .map((item: any) => {
+      const videoId = parseVideoId(item) || "";
+      const seconds = item.duration || 0;
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+      return {
+        videoId,
+        title: item.title || "Unknown Track",
+        channelName: item.uploaderName || item.channelName || "Unknown Artist",
+        thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+        duration
+      };
+    });
+
+  if (videos.length === 0) {
+    throw new Error(`Instance ${instance} returned 0 valid video items`);
+  }
+
+  console.log(`[YouTubeSearch] Piped instance [${instance}] WON the search race with ${videos.length} results!`);
+  return videos;
+}
+
+/**
+ * Queries a list of public Invidious and Piped API search endpoints IN PARALLEL to fetch YouTube videos
  * without getting blocked or triggering Vercel 10s Serverless timeouts.
  */
-async function searchYouTubeViaInvidious(query: string): Promise<YouTubeVideo[]> {
-  const activeInstances = [
+async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeVideo[]> {
+  const invidiousInstances = [
     "yewtu.be",
     "invidious.flokinet.to",
     "iv.melmac.space",
     "invidious.projectsegfaut.im",
-    "invidious.nerdvpn.de",
     "invidious.perennialte.ch",
+    "invidious.nerdvpn.de",
     "invidio.xamh.de",
     "iv.ggtyler.dev",
-    "invidious.lunar.icu",
-    "invidious.no-logs.com",
-    "inv.tux.im"
+    "invidious.lunar.icu"
   ];
 
-  console.log(`[YouTubeSearch] Starting parallel search race across ${activeInstances.length} Invidious instances...`);
+  const pipedInstances = [
+    "pipedapi.kavin.rocks",
+    "pipedapi.tokhmi.xyz",
+    "api.piped.yt",
+    "piped-api.lule.io",
+    "pipedapi.adminforge.de",
+    "pipedapi.astphy.com",
+    "pipedapi.swg.rocks",
+    "pipedapi.colby.school",
+    "pipedapi.us.to"
+  ];
+
+  const totalCount = invidiousInstances.length + pipedInstances.length;
+  console.log(`[YouTubeSearch] Starting parallel search race across ${totalCount} API proxy endpoints (Invidious & Piped)...`);
 
   return new Promise<YouTubeVideo[]>((resolve) => {
     let resolved = false;
     let failedCount = 0;
     const errors: string[] = [];
 
-    // Safety timeout of 4.5 seconds to ensure Vercel never times out
+    // Safety timeout of 5 seconds to ensure quick completion and prevent server hangs
     const safetyTimeout = setTimeout(() => {
       if (!resolved) {
         resolved = true;
-        console.warn("[YouTubeSearch] Parallel Invidious race timed out at 4.5s.");
+        console.warn("[YouTubeSearch] Parallel proxy race timed out at 5s.");
         resolve([]);
       }
-    }, 4500);
+    }, 5000);
 
-    activeInstances.forEach((instance) => {
+    const handleSuccess = (results: YouTubeVideo[]) => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        resolve(results);
+      }
+    };
+
+    const handleFailure = (err: any, source: string) => {
+      failedCount++;
+      errors.push(`${source}: ${err.message || err}`);
+      if (failedCount === totalCount && !resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        console.error("[YouTubeSearch] All proxy API instances failed:", errors.join(" | "));
+        resolve([]);
+      }
+    };
+
+    // Launch Invidious instances
+    invidiousInstances.forEach((instance) => {
       searchSingleInvidious(instance, query)
-        .then((results) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(safetyTimeout);
-            resolve(results);
-          }
-        })
-        .catch((err: any) => {
-          failedCount++;
-          errors.push(`${instance}: ${err.message || err}`);
-          if (failedCount === activeInstances.length && !resolved) {
-            resolved = true;
-            clearTimeout(safetyTimeout);
-            console.error("[YouTubeSearch] All Invidious instances in the parallel race failed:", errors.join(" | "));
-            resolve([]);
-          }
-        });
+        .then(handleSuccess)
+        .catch((err) => handleFailure(err, `Invidious:${instance}`));
+    });
+
+    // Launch Piped instances
+    pipedInstances.forEach((instance) => {
+      searchSinglePiped(instance, query)
+        .then(handleSuccess)
+        .catch((err) => handleFailure(err, `Piped:${instance}`));
     });
   });
 }
@@ -276,9 +369,20 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
       return geminiResults;
     }
   } catch (err: any) {
-    console.error("[YouTubeSearch] searchYouTubeViaGemini failed, falling back to scraper:", err.message || err);
+    console.error("[YouTubeSearch] searchYouTubeViaGemini failed, falling back to proxy race:", err.message || err);
   }
 
+  // Tier 2: Try lightweight, parallel Invidious + Piped API proxy race (bypasses direct Cloud Run IP blocks)
+  try {
+    const proxyResults = await searchYouTubeViaApiProxies(query);
+    if (proxyResults && proxyResults.length > 0) {
+      return proxyResults;
+    }
+  } catch (err: any) {
+    console.error("[YouTubeSearch] searchYouTubeViaApiProxies failed, falling back to scraper:", err.message || err);
+  }
+
+  // Tier 3: Scraping (last resort fallback, often soft-blocked on cloud host IPs but useful as general backup)
   try {
     // No sp filters to ensure maximum broad relevance / search is "محرية"
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
@@ -299,7 +403,7 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) {
       console.warn('[YouTubeSearch] Unexpected content-type:', contentType);
-      return await searchYouTubeViaInvidious(query);
+      return await searchYouTubeViaApiProxies(query);
     }
 
     const html = await response.text();
@@ -329,11 +433,11 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
     if (!ytInitialData) {
       const isConsentPage = html.includes('consent.youtube.com') || html.includes('www.google.com/sorry');
       if (isConsentPage) {
-        console.warn('[YouTubeSearch] Bot detection / consent page returned. Results unavailable. Falling back to Invidious API...');
+        console.warn('[YouTubeSearch] Bot detection / consent page returned. Results unavailable. Falling back to proxy API race...');
       } else {
-        console.warn('[YouTubeSearch] Could not extract ytInitialData from response. Falling back to Invidious API...');
+        console.warn('[YouTubeSearch] Could not extract ytInitialData from response. Falling back to proxy API race...');
       }
-      return await searchYouTubeViaInvidious(query);
+      return await searchYouTubeViaApiProxies(query);
     }
 
     // Recursively extract all videoRenderer nodes present in the body to ensure we don't miss anything!
@@ -364,14 +468,14 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
 
     console.log(`[YouTubeSearch] Successfully parsed ${videos.length} videos recursively.`);
     if (videos.length === 0) {
-      console.log('[YouTubeSearch] Scraping returned 0 videos. Falling back to Invidious API...');
-      return await searchYouTubeViaInvidious(query);
+      console.log('[YouTubeSearch] Scraping returned 0 videos. Falling back to proxy API race...');
+      return await searchYouTubeViaApiProxies(query);
     }
     // Return up to 15-20 results for a rich search experience, satisfying free-form request
     return videos.slice(0, 20);
   } catch (error: any) {
     console.error("[YouTubeSearch Server Error]", error.message || error);
-    console.log('[YouTubeSearch] Error encountered. Falling back to Invidious API...');
-    return await searchYouTubeViaInvidious(query);
+    console.log('[YouTubeSearch] Error encountered. Falling back to proxy API race...');
+    return await searchYouTubeViaApiProxies(query);
   }
 }

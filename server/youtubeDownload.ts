@@ -39,21 +39,50 @@ export async function handleDownload(req: express.Request, res: express.Response
       .replace(/[\/\\:*?"<>|]/g, '') // remove illegal characters
       .trim() || 'audio';
 
-    // List of reliable public Cobalt API nodes to iterate over
-    const COBALT_MIRRORS = [
+    // List of highly reliable public Cobalt API endpoints supporting both v10 and older versions
+    const COBALT_ENDPOINTS = [
+      'https://api.cobalt.tools/',
       'https://api.cobalt.tools/api/json',
+      'https://cobalt.xyz/',
       'https://cobalt.xyz/api/json',
+      'https://co.wuk.sh/',
       'https://co.wuk.sh/api/json',
+      'https://cobalt-api.lule.io/',
       'https://cobalt-api.lule.io/api/json',
-      'https://api.disroot.org/cobalt/api/json'
+      'https://api.disroot.org/cobalt/',
+      'https://api.disroot.org/cobalt/api/json',
+      'https://cobalt.perennialte.ch/',
+      'https://cobalt.perennialte.ch/api/json',
+      'https://cobalt.projectsegfaut.im/',
+      'https://cobalt.projectsegfaut.im/api/json'
     ];
 
-    // 1. ATTEMPT COBALT DOWNLOAD API FIRST (Extremely reliable, bypasses YouTube's server IP blocks)
-    for (const mirror of COBALT_MIRRORS) {
-      try {
-        console.log(`[youtubeDownload] Triaging Cobalt mirror: ${mirror} for URL: ${videoUrl}`);
-        const cobaltResponse = await fetch(mirror, {
+    console.log(`[youtubeDownload] Triggering parallel race across ${COBALT_ENDPOINTS.length} Cobalt endpoints for: ${videoUrl}`);
+
+    // Helper to race multiple Cobalt fetch requests
+    const downloadUrl = await new Promise<string | null>((resolve) => {
+      let resolved = false;
+      let finishedCount = 0;
+      const controllers: AbortController[] = [];
+
+      // Timeout at 6 seconds to ensure quick completion and prevent server hangs
+      const safetyTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          controllers.forEach(c => {
+            try { c.abort(); } catch (e) {}
+          });
+          resolve(null);
+        }
+      }, 6000);
+
+      COBALT_ENDPOINTS.forEach((endpoint) => {
+        const controller = new AbortController();
+        controllers.push(controller);
+
+        fetch(endpoint, {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -61,37 +90,63 @@ export async function handleDownload(req: express.Request, res: express.Response
           },
           body: JSON.stringify({
             url: videoUrl,
-            downloadMode: 'audio',
-            isAudioOnly: true,
+            downloadMode: 'audio', // Cobalt v10 format
+            isAudioOnly: true,     // Classic format (v7-v9)
             audioFormat: 'mp3',
             audioBitrate: '192',
-          }),
-        });
-
-        if (cobaltResponse.ok) {
-          const data: any = await cobaltResponse.json();
-          console.log(`[youtubeDownload] Cobalt mirror [${mirror}] returned status:`, data.status);
-          
-          if ((data.status === 'stream' || data.status === 'redirect' || data.status === 'tunnel') && data.url) {
-            console.log(`[youtubeDownload] Obtained conversion link: ${data.url}`);
+            filenameStyle: 'classic',
+            videoQuality: '720'
+          })
+        })
+        .then(async (res) => {
+          if (res.ok) {
+            const data: any = await res.json();
+            let url = data.url;
             
-            // To completely prevent Vercel node serverless 10-second timeout,
-            // we respond with a JSON payload containing the direct CDN redirect URL.
-            // This is 100% resilient and downloads at incredible speeds directly to the client browser.
-            return res.status(200).json({
-              success: true,
-              redirectUrl: data.url
-            });
-          } else {
-            console.warn(`[youtubeDownload] Mirror [${mirror}] returned status but no direct URL:`, data);
+            // Handle picker style response (some instances return a picker list of format streams)
+            if (data.status === 'picker' && Array.isArray(data.picker) && data.picker.length > 0) {
+              url = data.picker[0].url;
+            }
+
+            const isSuccessfulStatus = ['stream', 'redirect', 'tunnel', 'picker', 'success'].includes(data.status);
+            
+            if (isSuccessfulStatus && url && !resolved) {
+              resolved = true;
+              clearTimeout(safetyTimeout);
+              
+              // Abort all other pending requests to free resources
+              controllers.forEach(c => {
+                try { c.abort(); } catch (e) {}
+              });
+              
+              console.log(`[youtubeDownload] Parallel Cobalt race WON by endpoint: ${endpoint}`);
+              resolve(url);
+            }
           }
-        } else {
-          console.warn(`[youtubeDownload] Mirror [${mirror}] returned non-200 code:`, cobaltResponse.status);
-        }
-      } catch (mirrorErr: any) {
-        console.error(`[youtubeDownload] Mirror [${mirror}] connection failed:`, mirrorErr.message || mirrorErr);
-      }
+        })
+        .catch(() => {
+          // Ignore failures of individual endpoints in the race
+        })
+        .finally(() => {
+          finishedCount++;
+          if (finishedCount === COBALT_ENDPOINTS.length && !resolved) {
+            resolved = true;
+            clearTimeout(safetyTimeout);
+            resolve(null);
+          }
+        });
+      });
+    });
+
+    if (downloadUrl) {
+      console.log(`[youtubeDownload] Successfully obtained conversion redirect link: ${downloadUrl}`);
+      return res.status(200).json({
+        success: true,
+        redirectUrl: downloadUrl
+      });
     }
+
+    console.warn('[youtubeDownload] All parallel Cobalt endpoints failed or timed out.');
 
     // 2. FALLBACK TO YTDL-CORE + FFMPEG (Only for local dev, will throw on Vercel but safe to keep)
     console.log('[youtubeDownload] All Cobalt mirrors failed or timed out. Proceeding with ytdl-core local fallback...');
