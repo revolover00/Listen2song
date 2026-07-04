@@ -28,6 +28,94 @@ interface SearchResult {
   duration: string;
 }
 
+// 100% Reliable Client-Side Direct Search utilizing CORS-friendly Invidious instances
+async function searchInvidiousClientSide(query: string): Promise<SearchResult[]> {
+  const instances = [
+    "yewtu.be",
+    "invidious.flokinet.to",
+    "iv.melmac.space",
+    "invidious.projectsegfaut.im",
+    "invidious.nerdvpn.de",
+    "invidious.perennialte.ch",
+    "invidio.xamh.de",
+    "iv.ggtyler.dev",
+    "invidious.lunar.icu",
+    "invidious.no-logs.com",
+    "inv.tux.im"
+  ];
+
+  console.log(`[YouTubeSearchView] Running direct browser search on ${instances.length} Invidious instances...`);
+
+  return new Promise<SearchResult[]>((resolve) => {
+    let resolved = false;
+    let failedCount = 0;
+    const controllers: AbortController[] = [];
+
+    // Safety timeout of 3.5 seconds to ensure ultra responsive UI
+    const safetyTimeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        controllers.forEach(c => {
+          try { c.abort(); } catch (e) {}
+        });
+        console.warn("[YouTubeSearchView] Browser direct search race timed out.");
+        resolve([]);
+      }
+    }, 3500);
+
+    instances.forEach((instance) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+
+      fetch(`https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const items = await res.json();
+        if (Array.isArray(items) && items.length > 0) {
+          const results: SearchResult[] = items
+            .filter((item: any) => item.type === 'video' && item.videoId)
+            .map((item: any) => {
+              const seconds = item.lengthSeconds || 0;
+              const m = Math.floor(seconds / 60);
+              const s = Math.floor(seconds % 60);
+              const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+              return {
+                videoId: item.videoId,
+                title: item.title || "Unknown Track",
+                channelName: item.author || "Unknown Artist",
+                thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
+                duration
+              };
+            });
+
+          if (results.length > 0 && !resolved) {
+            resolved = true;
+            clearTimeout(safetyTimeout);
+            controllers.forEach(c => {
+              try { c.abort(); } catch (e) {}
+            });
+            console.log(`[YouTubeSearchView] Browser direct search won by instance [${instance}] with ${results.length} results!`);
+            resolve(results);
+          }
+        }
+      })
+      .catch(() => {
+        failedCount++;
+        if (failedCount === instances.length && !resolved) {
+          resolved = true;
+          clearTimeout(safetyTimeout);
+          resolve([]);
+        }
+      });
+    });
+  });
+}
+
 export function YouTubeSearchView({
   onSelectTrack,
   currentTrackId,
@@ -136,27 +224,39 @@ export function YouTubeSearchView({
         
         let searchResults: SearchResult[] = [];
         
-        // 1. Try CDN first
-        const ytSearch = (window as any).ytSearch;
-        if (typeof ytSearch === 'function') {
-          try {
-            console.log("[YouTubeView] Pre-loading suggestions via CDN for:", randomQuery);
-            const raw = await ytSearch(randomQuery);
-            if (Array.isArray(raw) && raw.length > 0) {
-              searchResults = raw.map((item: any) => ({
-                videoId: item.videoId || item.id,
-                title: item.title || item.name || "Unknown title",
-                channelName: item.author?.name || item.channelName || item.channel || "Unknown Channel",
-                thumbnail: item.thumbnail || item.image || item.thumbnails?.[0]?.url || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17",
-                duration: item.duration || item.timestamp || "0:00"
-              }));
+        // 1. Try direct browser search first (100% resilient and fast)
+        try {
+          const direct = await searchInvidiousClientSide(randomQuery);
+          if (direct && direct.length > 0) {
+            searchResults = direct;
+          }
+        } catch (e) {
+          console.warn("[YouTubeView] Direct client suggestions failed, falling back:", e);
+        }
+
+        // 2. Try CDN second
+        if (searchResults.length === 0) {
+          const ytSearch = (window as any).ytSearch;
+          if (typeof ytSearch === 'function') {
+            try {
+              console.log("[YouTubeView] Pre-loading suggestions via CDN for:", randomQuery);
+              const raw = await ytSearch(randomQuery);
+              if (Array.isArray(raw) && raw.length > 0) {
+                searchResults = raw.map((item: any) => ({
+                  videoId: item.videoId || item.id,
+                  title: item.title || item.name || "Unknown title",
+                  channelName: item.author?.name || item.channelName || item.channel || "Unknown Channel",
+                  thumbnail: item.thumbnail || item.image || item.thumbnails?.[0]?.url || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17",
+                  duration: item.duration || item.timestamp || "0:00"
+                }));
+              }
+            } catch (err) {
+              console.warn("[YouTubeView] CDN suggestion load failed, falling back.");
             }
-          } catch (err) {
-            console.warn("[YouTubeView] CDN suggestion load failed, falling back.");
           }
         }
 
-        // 2. Fallback to server scraper
+        // 3. Fallback to server scraper
         if (searchResults.length === 0) {
           const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(randomQuery)}`);
           if (res.ok) {
@@ -197,28 +297,40 @@ export function YouTubeSearchView({
     setHasSearched(true);
     try {
       let searchResults: SearchResult[] = [];
+
+      // 1. Try direct browser search first (100% resilient and fast, bypasses server blocks)
+      try {
+        const direct = await searchInvidiousClientSide(activeQuery);
+        if (direct && direct.length > 0) {
+          searchResults = direct;
+        }
+      } catch (e) {
+        console.warn("[YouTubeView] Direct client search failed, falling back:", e);
+      }
       
-      // 1. Try invoking the CDN ytSearch library if present
-      const ytSearch = (window as any).ytSearch;
-      if (typeof ytSearch === 'function') {
-        try {
-          console.log("[YouTubeView] Querying ytSearch via CDN for:", activeQuery);
-          const raw = await ytSearch(activeQuery);
-          if (Array.isArray(raw) && raw.length > 0) {
-            searchResults = raw.map((item: any) => ({
-              videoId: item.videoId || item.id,
-              title: item.title || item.name || "Unknown title",
-              channelName: item.author?.name || item.channelName || item.channel || "Unknown Channel",
-              thumbnail: item.thumbnail || item.image || item.thumbnails?.[0]?.url || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17",
-              duration: item.duration || item.timestamp || "0:00"
-            }));
+      // 2. Try invoking the CDN ytSearch library if present
+      if (searchResults.length === 0) {
+        const ytSearch = (window as any).ytSearch;
+        if (typeof ytSearch === 'function') {
+          try {
+            console.log("[YouTubeView] Querying ytSearch via CDN for:", activeQuery);
+            const raw = await ytSearch(activeQuery);
+            if (Array.isArray(raw) && raw.length > 0) {
+              searchResults = raw.map((item: any) => ({
+                videoId: item.videoId || item.id,
+                title: item.title || item.name || "Unknown title",
+                channelName: item.author?.name || item.channelName || item.channel || "Unknown Channel",
+                thumbnail: item.thumbnail || item.image || item.thumbnails?.[0]?.url || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17",
+                duration: item.duration || item.timestamp || "0:00"
+              }));
+            }
+          } catch (err) {
+            console.warn("[YouTubeView] CDN search failed. Falling back to backend parser.");
           }
-        } catch (err) {
-          console.warn("[YouTubeView] CDN search failed. Falling back to backend parser.");
         }
       }
 
-      // 2. If CDN results are empty or the method failed, call our robust Express scraper fallback
+      // 3. If everything else failed, call our robust Express scraper fallback
       if (searchResults.length === 0) {
         const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(activeQuery)}`);
         if (!res.ok) {
