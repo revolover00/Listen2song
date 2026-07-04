@@ -11,6 +11,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
   const [isMuted, setIsMuted] = useState(false);
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState<'none' | 'all' | 'one'>('none');
+  const [unplayedShuffleIds, setUnplayedShuffleIds] = useState<string[]>([]);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ytPlayerRef = useRef<any>(null);
@@ -146,6 +147,18 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
       console.error('Error fetching player states from localStorage:', e);
     }
   }, [tracks.length]);
+
+  // Initialize/sync shuffle queue when shuffle is enabled or track count changes
+  useEffect(() => {
+    if (isShuffle) {
+      const allIds = tracks.map(t => t.id);
+      const remaining = allIds.filter(id => id !== currentTrackId);
+      setUnplayedShuffleIds(remaining.length > 0 ? remaining : allIds);
+    } else {
+      setUnplayedShuffleIds([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShuffle, tracks.length]);
 
   // Handle source and track changes
   useEffect(() => {
@@ -382,6 +395,13 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
     const isYt = track?.source === 'youtube' || id.startsWith('youtube-');
     setCurrentTrackId(id);
     localStorage.setItem(STORAGE_KEYS.CURRENT_TRACK_ID, id);
+    
+    // Remove from unplayed shuffle list when played
+    setUnplayedShuffleIds(prevUnplayed => {
+      const updated = prevUnplayed.filter(item => item !== id);
+      return updated;
+    });
+
     // For YouTube tracks, only set isPlaying after YT player confirms ready
     if (isYt && !isYtReady) {
       // The [currentTrackId, isYtReady, isPlaying] effect will auto-play once ready
@@ -393,32 +413,68 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
 
   const next = () => {
     if (tracks.length === 0) return;
-    let nextIndex = 0;
 
     if (isShuffle) {
-      nextIndex = Math.floor(Math.random() * tracks.length);
+      const allIds = tracks.map(t => t.id);
+      let availableUnplayed = unplayedShuffleIds.filter(id => allIds.includes(id));
+      
+      // If we don't have any unplayed tracks left, replenish it!
+      if (availableUnplayed.length === 0) {
+        // Replenish with all tracks except the current playing one (to avoid consecutive plays)
+        availableUnplayed = allIds.filter(id => id !== currentTrackId);
+        if (availableUnplayed.length === 0) {
+          availableUnplayed = allIds;
+        }
+      }
+      
+      // Pick a random track from the remaining unplayed queue
+      const randomIndex = Math.floor(Math.random() * availableUnplayed.length);
+      const chosenId = availableUnplayed[randomIndex];
+      
+      // Remove the chosen track from the unplayed queue
+      const nextUnplayed = availableUnplayed.filter(id => id !== chosenId);
+      setUnplayedShuffleIds(nextUnplayed);
+      
+      selectTrack(chosenId);
     } else {
       const currentIndex = tracks.findIndex((t) => t.id === currentTrackId);
+      let nextIndex = 0;
       if (currentIndex !== -1) {
         nextIndex = (currentIndex + 1) % tracks.length;
       }
+      selectTrack(tracks[nextIndex].id);
     }
-    selectTrack(tracks[nextIndex].id);
   };
 
   const prev = () => {
     if (tracks.length === 0) return;
-    let prevIndex = 0;
 
     if (isShuffle) {
-      prevIndex = Math.floor(Math.random() * tracks.length);
+      const allIds = tracks.map(t => t.id);
+      let availableUnplayed = unplayedShuffleIds.filter(id => allIds.includes(id));
+      
+      if (availableUnplayed.length === 0) {
+        availableUnplayed = allIds.filter(id => id !== currentTrackId);
+        if (availableUnplayed.length === 0) {
+          availableUnplayed = allIds;
+        }
+      }
+
+      const randomIndex = Math.floor(Math.random() * availableUnplayed.length);
+      const chosenId = availableUnplayed[randomIndex];
+      
+      const nextUnplayed = availableUnplayed.filter(id => id !== chosenId);
+      setUnplayedShuffleIds(nextUnplayed);
+      
+      selectTrack(chosenId);
     } else {
       const currentIndex = tracks.findIndex((t) => t.id === currentTrackId);
+      let prevIndex = 0;
       if (currentIndex !== -1) {
         prevIndex = currentIndex - 1 < 0 ? tracks.length - 1 : currentIndex - 1;
       }
+      selectTrack(tracks[prevIndex].id);
     }
-    selectTrack(tracks[prevIndex].id);
   };
 
   const seekTo = (time: number) => {
@@ -489,6 +545,15 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
   // Get next upcoming track preview
   const getNextTrackId = (): string | null => {
     if (tracks.length <= 1) return null;
+    if (isShuffle) {
+      const allIds = tracks.map(t => t.id);
+      const availableUnplayed = unplayedShuffleIds.filter(id => allIds.includes(id));
+      if (availableUnplayed.length > 0) {
+        return availableUnplayed[0];
+      }
+      const potential = allIds.filter(id => id !== currentTrackId);
+      return potential.length > 0 ? potential[0] : allIds[0];
+    }
     const currentIndex = tracks.findIndex((t) => t.id === currentTrackId);
     if (currentIndex === -1) return null;
     const nextIdx = (currentIndex + 1) % tracks.length;

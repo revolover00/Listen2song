@@ -35,6 +35,91 @@ function extractVideoRenderers(obj: any, list: any[] = [], seenIds: Set<string> 
 }
 
 /**
+ * List of highly reliable and active public Invidious instances to use as fallback
+ */
+const INVIDIOUS_INSTANCES = [
+  "yewtu.be",
+  "invidious.flokinet.to",
+  "iv.melmac.space",
+  "invidious.projectsegfaut.im",
+  "invidious.perennialte.ch",
+  "invidious.nerdvpn.de",
+  "invidio.xamh.de",
+  "invidious.lunar.icu",
+  "iv.ggtyler.dev"
+];
+
+/**
+ * Robust fetch helper with timeout to avoid hanging on slow nodes
+ */
+async function fetchWithTimeout(url: string, options: any = {}, timeoutMs = 3000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
+/**
+ * Queries a list of public Invidious API search endpoints to fetch YouTube videos without getting blocked
+ */
+async function searchYouTubeViaInvidious(query: string): Promise<YouTubeVideo[]> {
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      console.log(`[YouTubeSearch] Trying Invidious fallback on: https://${instance}`);
+      const response = await fetchWithTimeout(
+        `https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        },
+        3000
+      );
+
+      if (response.ok) {
+        const items = await response.json();
+        if (Array.isArray(items) && items.length > 0) {
+          const videos: YouTubeVideo[] = items
+            .filter((item: any) => item.type === 'video' && item.videoId)
+            .map((item: any) => {
+              const seconds = item.lengthSeconds || 0;
+              const m = Math.floor(seconds / 60);
+              const s = Math.floor(seconds % 60);
+              const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+              return {
+                videoId: item.videoId,
+                title: item.title || "Unknown Track",
+                channelName: item.author || "Unknown Artist",
+                thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
+                duration
+              };
+            });
+          
+          if (videos.length > 0) {
+            console.log(`[YouTubeSearch] Invidious instance [${instance}] successfully returned ${videos.length} results.`);
+            return videos.slice(0, 20);
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[YouTubeSearch] Invidious instance [${instance}] connection failed or timed out:`, e.message || e);
+    }
+  }
+  console.warn('[YouTubeSearch] All Invidious fallback instances failed.');
+  return [];
+}
+
+/**
  * Searches YouTube for videos matching the query, using high-fidelity HTML scraping
  * of ytInitialData (no API key required).
  */
@@ -59,7 +144,7 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) {
       console.warn('[YouTubeSearch] Unexpected content-type:', contentType);
-      return [];
+      return await searchYouTubeViaInvidious(query);
     }
 
     const html = await response.text();
@@ -89,11 +174,11 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
     if (!ytInitialData) {
       const isConsentPage = html.includes('consent.youtube.com') || html.includes('www.google.com/sorry');
       if (isConsentPage) {
-        console.warn('[YouTubeSearch] Bot detection / consent page returned. Results unavailable.');
+        console.warn('[YouTubeSearch] Bot detection / consent page returned. Results unavailable. Falling back to Invidious API...');
       } else {
-        console.warn('[YouTubeSearch] Could not extract ytInitialData from response.');
+        console.warn('[YouTubeSearch] Could not extract ytInitialData from response. Falling back to Invidious API...');
       }
-      return [];
+      return await searchYouTubeViaInvidious(query);
     }
 
     // Recursively extract all videoRenderer nodes present in the body to ensure we don't miss anything!
@@ -123,10 +208,15 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
     }
 
     console.log(`[YouTubeSearch] Successfully parsed ${videos.length} videos recursively.`);
+    if (videos.length === 0) {
+      console.log('[YouTubeSearch] Scraping returned 0 videos. Falling back to Invidious API...');
+      return await searchYouTubeViaInvidious(query);
+    }
     // Return up to 15-20 results for a rich search experience, satisfying free-form request
     return videos.slice(0, 20);
   } catch (error: any) {
     console.error("[YouTubeSearch Server Error]", error.message || error);
-    return [];
+    console.log('[YouTubeSearch] Error encountered. Falling back to Invidious API...');
+    return await searchYouTubeViaInvidious(query);
   }
 }
