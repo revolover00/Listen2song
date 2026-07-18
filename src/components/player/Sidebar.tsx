@@ -20,16 +20,30 @@ export function Sidebar({
   const [searchQuery, setSearchQuery] = useState('');
 
   // Sifting and filtering the tracks relative to user search query
+  const shownTracks = React.useMemo(() => {
+    return tracks.filter((t) => {
+      // Exclude demo tracks entirely from sidebar as per user request
+      const isDemo = t.isDemo === true || t.id.startsWith('demo-');
+      if (isDemo) return false;
+
+      const isYt = t.source === 'youtube' || t.id.startsWith('youtube-');
+      if (isYt) {
+        return t.isSaved === true;
+      }
+      return true;
+    });
+  }, [tracks]);
+
   const filteredTracks = React.useMemo(() => {
-    if (!searchQuery.trim()) return tracks;
+    if (!searchQuery.trim()) return shownTracks;
     const q = searchQuery.toLowerCase();
-    return tracks.filter(
+    return shownTracks.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
         t.artist.toLowerCase().includes(q) ||
         (t.album && t.album.toLowerCase().includes(q))
     );
-  }, [tracks, searchQuery]);
+  }, [shownTracks, searchQuery]);
 
   return (
     <div className="w-64 md:w-68 bg-[#121212]/35 backdrop-blur-3xl p-4 flex flex-col border-r border-white/5 h-full overflow-hidden select-none">
@@ -40,11 +54,11 @@ export function Sidebar({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-brand-purple animate-pulse shadow-[0_0_10px_var(--brand-purple)]" />
             <h3 className="font-display font-black text-[10px] tracking-[0.2em] text-white/85 uppercase">
-              Tracks Library / مكتبة الأغاني
+              Tracks Library
             </h3>
           </div>
           <span className="text-[9px] font-mono font-bold text-brand-purple bg-brand-purple/10 px-2 py-0.5 rounded-full">
-            {tracks.length} items
+            {shownTracks.length} items
           </span>
         </div>
 
@@ -55,7 +69,7 @@ export function Sidebar({
           </span>
           <input
             type="text"
-            placeholder="Search within library... / ابحث هنا..."
+            placeholder="Search within library..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-black/40 border border-white/5 focus:border-brand-purple/40 rounded-xl pl-8.5 pr-8 py-2 text-[10px] text-white placeholder-white/30 focus:outline-none transition-all"
@@ -104,7 +118,7 @@ export function Sidebar({
                 </div>
                 <div className="overflow-hidden text-left leading-normal flex-1">
                   <p className={`text-[11.5px] font-bold truncate ${isActive ? 'text-brand-purple' : 'text-white'} flex items-center gap-1.5`}>
-                    <span className="opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube / يوتيوب" : "Local / ملف محلي"}>
+                    <span className="opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube" : "Local"}>
                       {track.source === 'youtube' || track.id.startsWith('youtube-') ? (
                         <Youtube className="h-3.5 w-3.5 text-red-500" />
                       ) : (
@@ -124,7 +138,7 @@ export function Sidebar({
                 <button
                   onClick={() => onEditTrack(track)}
                   className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/5 hover:bg-brand-purple/20 text-white/60 hover:text-brand-purple transition-all cursor-pointer p-1"
-                  title="Rename title / تعديل الاسم"
+                  title="Rename title"
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
@@ -135,14 +149,14 @@ export function Sidebar({
                       e.stopPropagation();
                       if (
                         confirm(
-                          `هل أنت متأكد أنك تريد حذف أغنية "${track.title}"؟\nAre you sure you want to delete "${track.title}"?`
+                          `Are you sure you want to delete "${track.title}"?`
                         )
                       ) {
                         onDeleteTrack(track.id);
                       }
                     }}
                     className="w-6 h-6 rounded-lg flex items-center justify-center bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-all cursor-pointer p-1"
-                    title="Delete track / حذف الأغنية"
+                    title="Delete track"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -154,7 +168,7 @@ export function Sidebar({
 
         {filteredTracks.length === 0 && (
           <div className="text-center py-10 text-white/30 italic text-[11px] select-none">
-            No tracks found / لا يوجد أغاني
+            No tracks found
           </div>
         )}
       </div>

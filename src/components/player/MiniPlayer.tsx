@@ -68,13 +68,13 @@ export function MiniPlayer({
         <div className="flex items-center gap-1">
           <div className="w-1.5 h-1.5 rounded-full bg-brand-purple animate-pulse shadow-[0_0_8px_var(--brand-purple)] animate-pulse-slow" />
           <span className="text-[8px] font-mono tracking-widest text-[#8a8a8a] uppercase bg-white/5 px-1.5 py-0.5 rounded-md border border-white/5">
-            mini player / المصغّر
+            mini player
           </span>
         </div>
         <button
           onClick={onRestore}
           className="p-1.5 rounded-lg bg-white/5 hover:bg-brand-purple/20 text-white/50 hover:text-white transition-all cursor-pointer flex items-center justify-center border border-white/5 active:scale-95"
-          title="Restore Full Player / استعادة الكامل"
+          title="Restore Full Player"
         >
           <Maximize2 className="h-3.5 w-3.5" />
         </button>
@@ -166,7 +166,7 @@ export function MiniPlayer({
           <button
             onClick={onPrev}
             className="text-white/50 hover:text-white h-7 w-7 rounded-full flex items-center justify-center hover:bg-white/5 transition-all cursor-pointer"
-            title="Prev / السابق"
+            title="Previous"
           >
             <SkipBack className="h-3.5 w-3.5 fill-current" />
           </button>
@@ -184,7 +184,7 @@ export function MiniPlayer({
           <button
             onClick={onNext}
             className="text-white/50 hover:text-white h-7 w-7 rounded-full flex items-center justify-center hover:bg-white/5 transition-all cursor-pointer"
-            title="Next / التالي"
+            title="Next"
           >
             <SkipForward className="h-3.5 w-3.5 fill-current" />
           </button>

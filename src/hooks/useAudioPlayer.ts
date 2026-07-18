@@ -21,6 +21,45 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
   const onEndedRef = useRef<() => void>(() => {});
   const nextRef = useRef<() => void>(() => {});
 
+  // Web Audio API refs for volume boost up to 300%
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+
+  const initWebAudio = () => {
+    if (!audioRef.current || typeof window === 'undefined') return;
+    if (audioCtxRef.current) return;
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const source = ctx.createMediaElementSource(audioRef.current);
+      const gainNode = ctx.createGain();
+      
+      // Add compressor to prevent harsh clipping when boosting to 300%
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-24, ctx.currentTime);
+      compressor.knee.setValueAtTime(40, ctx.currentTime);
+      compressor.ratio.setValueAtTime(12, ctx.currentTime);
+      compressor.attack.setValueAtTime(0, ctx.currentTime);
+      compressor.release.setValueAtTime(0.25, ctx.currentTime);
+
+      source.connect(gainNode);
+      gainNode.connect(compressor);
+      compressor.connect(ctx.destination);
+      
+      audioCtxRef.current = ctx;
+      gainNodeRef.current = gainNode;
+      sourceNodeRef.current = source;
+      
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+    } catch (err) {
+      console.warn("Failed to initialize Web Audio API for volume boost:", err);
+    }
+  };
+
   // Initialize Audio instance safely in browser
   if (!audioRef.current && typeof window !== 'undefined') {
     audioRef.current = new Audio();
@@ -78,7 +117,8 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
               setIsYtReady(true);
               // Use volumeRef to get the CURRENT volume, not the stale closure value
               try {
-                ytPlayerRef.current.setVolume(volumeRef.current * 100);
+                const ytVol = Math.min(100, Math.round(volumeRef.current * 100));
+                ytPlayerRef.current.setVolume(ytVol);
               } catch (e) {}
             },
             onStateChange: (event: any) => {
@@ -138,7 +178,9 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         const parsedVol = parseFloat(savedVolume);
         volumeRef.current = parsedVol;
         setVolumeState(parsedVol);
-        if (audioRef.current) audioRef.current.volume = parsedVol;
+        if (audioRef.current) {
+          audioRef.current.volume = Math.min(1, parsedVol);
+        }
       }
 
       if (savedRepeat) setIsRepeat(savedRepeat);
@@ -361,6 +403,15 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
       }
     } else {
       if (audioRef.current && currentTrack) {
+        if (!gainNodeRef.current && typeof window !== 'undefined') {
+          initWebAudio();
+        }
+        if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
+        if (gainNodeRef.current && audioCtxRef.current) {
+          gainNodeRef.current.gain.setTargetAtTime(isMuted ? 0 : volumeRef.current, audioCtxRef.current.currentTime, 0.01);
+        }
         audioRef.current.play()
           .then(() => setIsPlaying(true))
           .catch((e) => console.error('Play failed:', e));
@@ -495,16 +546,28 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
   };
 
   const setVolume = (v: number) => {
-    const vol = Math.max(0, Math.min(1, v));
+    const vol = Math.max(0, Math.min(3, v));
     volumeRef.current = vol;
     setVolumeState(vol);
     if (audioRef.current) {
-      audioRef.current.volume = vol;
+      if (!gainNodeRef.current && typeof window !== 'undefined') {
+        initWebAudio();
+      }
+      if (gainNodeRef.current && audioCtxRef.current) {
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
+        audioRef.current.volume = 1.0;
+        gainNodeRef.current.gain.setTargetAtTime(isMuted ? 0 : vol, audioCtxRef.current.currentTime, 0.01);
+      } else {
+        audioRef.current.volume = Math.min(1, vol);
+      }
       audioRef.current.muted = vol === 0 ? true : isMuted;
     }
     if (ytPlayerRef.current && typeof ytPlayerRef.current.setVolume === 'function') {
       try {
-        ytPlayerRef.current.setVolume(vol * 100);
+        const ytVol = Math.min(100, Math.round(vol * 100));
+        ytPlayerRef.current.setVolume(ytVol);
       } catch (e) {}
     }
     localStorage.setItem(STORAGE_KEYS.VOLUME, vol.toString());

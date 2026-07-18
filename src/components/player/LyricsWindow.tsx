@@ -93,9 +93,9 @@ export function LyricsWindow({ currentTrack, currentTime, onToast, onEditCurrent
         .join('\n');
       
       navigator.clipboard.writeText(cleanText);
-      onToast?.('Lyrics copied to clipboard! / تم نسخ كلمات الأغنية بنجاح', 'success');
+      onToast?.('Lyrics copied to clipboard!', 'success');
     } catch (e) {
-      onToast?.('Failed to copy lyrics / تعذر نسخ أسطر الكلمات', 'error');
+      onToast?.('Failed to copy lyrics', 'error');
     }
   };
 
@@ -124,9 +124,9 @@ export function LyricsWindow({ currentTrack, currentTime, onToast, onEditCurrent
               <button
                 onClick={onEditCurrentTrack}
                 className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-brand-purple hover:border-brand-purple text-[10px] sm:text-[11px] font-bold text-white/80 hover:text-white transition-all cursor-pointer"
-                title="Edit lyrics and metadata / تعديل الكلمات والبيانات"
+                title="Edit lyrics and metadata"
               >
-                Edit / تعديل
+                Edit
               </button>
             )}
 
@@ -135,7 +135,7 @@ export function LyricsWindow({ currentTrack, currentTime, onToast, onEditCurrent
               <button
                 onClick={handleCopy}
                 className="p-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all text-white/60 cursor-pointer"
-                title="Copy clean lyrics / نسخ الكلمات"
+                title="Copy clean lyrics"
               >
                 <Copy className="w-3.5 h-3.5" />
               </button>
@@ -211,13 +211,13 @@ export function LyricsWindow({ currentTrack, currentTime, onToast, onEditCurrent
         ) : (
           <div className="flex flex-col items-center justify-center text-center h-full text-white/30 italic pt-10 px-4">
             <Music className="w-8 h-8 opacity-30 mb-2 text-brand-purple" />
-            <p className="text-xs">No lyrics loaded for this song / لا توجد كلمات محملة لهذه الأغنية</p>
+            <p className="text-xs">No lyrics loaded for this song</p>
             {onEditCurrentTrack && (
               <button
                 onClick={onEditCurrentTrack}
                 className="mt-3 px-3 py-1 bg-brand-purple text-white hover:bg-brand-purple-dark rounded-lg text-[10px] font-bold tracking-tight transition-all cursor-pointer shadow-md"
               >
-                Add lyrics / إضافة كلمات الأغنية
+                Add lyrics
               </button>
             )}
           </div>

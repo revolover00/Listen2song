@@ -82,7 +82,7 @@ export function LibraryView({
             {tab === 'artists' && <User className="h-3.5 w-3.5" />}
             {tab === 'mix' && <Shuffle className="h-3.5 w-3.5" />}
             <span>
-              {tab === 'songs' ? 'Songs / الأغاني' : tab === 'albums' ? 'Albums / الألبومات' : tab === 'artists' ? 'Artists / الفنانين' : 'Mix / مكس'}
+              {tab === 'songs' ? 'Songs' : tab === 'albums' ? 'Albums' : tab === 'artists' ? 'Artists' : 'Mix'}
             </span>
           </button>
         );
@@ -120,7 +120,7 @@ export function LibraryView({
           </div>
           <div className="overflow-hidden text-left leading-normal flex-1">
             <h4 className={`text-xs font-bold truncate ${isActive ? 'text-brand-purple' : 'text-white'} flex items-center gap-1.5`}>
-              <span className="text-[9px] opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube / يوتيوب" : "Local / ملف محلي"}>
+              <span className="text-[9px] opacity-75 shrink-0" title={track.source === 'youtube' || track.id.startsWith('youtube-') ? "YouTube" : "Local"}>
                 {track.source === 'youtube' || track.id.startsWith('youtube-') ? '🎬' : '📁'}
               </span>
               <span className="truncate">{track.title}</span>
@@ -137,7 +137,7 @@ export function LibraryView({
           <button
             onClick={() => onSelectTrack(track.id)}
             className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-brand-purple/20 text-white/70 hover:text-white transition-all cursor-pointer text-[10px]"
-            title="Play Song / تشغيل"
+            title="Play Song"
           >
             {isActive ? (
               <Volume2 className="h-3.5 w-3.5 text-brand-purple animate-pulse" />
@@ -151,7 +151,7 @@ export function LibraryView({
             <button
               onClick={() => onEditTrack(track)}
               className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-brand-purple/20 text-white/50 hover:text-brand-purple transition-all cursor-pointer text-[10px]"
-              title="Edit Title / تعديل الاسم"
+              title="Edit Title"
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
@@ -162,12 +162,12 @@ export function LibraryView({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(`هل أنت متأكد أنك تريد حذف أغنية "${track.title}"؟\nAre you sure you want to delete "${track.title}"?`)) {
+                if (confirm(`Are you sure you want to delete "${track.title}"?`)) {
                   onDeleteTrack(track.id);
                 }
               }}
               className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-red-500/20 text-white/50 hover:text-red-500 transition-all cursor-pointer text-[10px]"
-              title="Delete Song / حذف الأغنية"
+              title="Delete Song"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -177,14 +177,14 @@ export function LibraryView({
     );
   };
 
-  // View 1: ALL Songs Tab (أغاني)
+  // View 1: ALL Songs Tab
   if (viewType === 'songs') {
     return (
       <div className="flex-1 bg-neutral-900/40 rounded-3xl p-4 md:p-6 flex flex-col h-[350px] md:h-full min-h-[300px] border border-white/5 overflow-hidden text-left">
         {renderTabsHeader()}
 
         <h3 className="text-[10px] font-black uppercase tracking-widest text-[#8A8A8A] mb-3 px-1 flex-shrink-0 flex items-center justify-between">
-          <span>All Songs / كل الأغاني ({tracks.length})</span>
+          <span>All Songs ({tracks.length})</span>
           <span className="text-[9px] text-[#8A8A8A]/60 italic font-mono lowercase">Manage tracks library</span>
         </h3>
 
@@ -211,7 +211,7 @@ export function LibraryView({
             onClick={() => setExpandedAlbum(null)}
             className="cursor-pointer flex items-center gap-2 text-[10px] uppercase font-black tracking-wider text-brand-purple hover:text-white transition-colors"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> العودة للألبومات / Back to Albums
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Albums
           </button>
           <span className="text-[10px] text-white/60 font-semibold truncate max-w-[180px] bg-brand-purple/15 px-2.5 py-1 rounded-lg border border-brand-purple/10 flex items-center gap-1.5">
             <Disc className="h-3 w-3 text-brand-purple shrink-0" /> {expandedAlbum}
@@ -236,7 +236,7 @@ export function LibraryView({
         {renderTabsHeader()}
 
         <h3 className="text-[10px] font-black uppercase tracking-widest text-[#8A8A8A] mb-4 px-1 flex-shrink-0 flex items-center gap-2">
-          <Disc className="h-4 w-4 text-brand-purple shrink-0" /> Collection Albums / الألبومات ({groupedAlbums.length})
+          <Disc className="h-4 w-4 text-brand-purple shrink-0" /> Collection Albums ({groupedAlbums.length})
         </h3>
 
         <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 gap-3.5" style={{ alignContent: 'start' }}>
@@ -264,7 +264,7 @@ export function LibraryView({
                   <p className="text-[10px] text-white/50 truncate mb-2">{representativeTrack.artist}</p>
                 </div>
                 <div className="text-[9px] uppercase font-bold tracking-wider text-brand-purple flex items-center gap-1 group-hover/album-card:translate-x-1 transition-transform">
-                  View Tracks / عرض الأغاني <ChevronRight className="h-3 w-3" />
+                  View Tracks <ChevronRight className="h-3 w-3" />
                 </div>
               </div>
             );
@@ -284,7 +284,7 @@ export function LibraryView({
             onClick={() => setExpandedArtist(null)}
             className="cursor-pointer flex items-center gap-2 text-[10px] uppercase font-black tracking-wider text-brand-purple hover:text-white transition-colors"
           >
-            <ArrowLeft className="h-3.5 w-3.5" /> العودة للفنانين / Back to Artists
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Artists
           </button>
           <span className="text-[10px] text-white/60 font-semibold truncate max-w-[180px] bg-brand-purple/15 px-2.5 py-1 rounded-lg border border-brand-purple/10 flex items-center gap-1.5">
             <User className="h-3 w-3 text-brand-purple shrink-0" /> {expandedArtist}
@@ -309,7 +309,7 @@ export function LibraryView({
         {renderTabsHeader()}
 
         <h3 className="text-[10px] font-black uppercase tracking-widest text-[#8A8A8A] mb-4 px-1 flex-shrink-0 flex items-center gap-2">
-          <Music className="h-4 w-4 text-brand-purple shrink-0" /> Curated Artists / الفنانين ({groupedArtists.length})
+          <Music className="h-4 w-4 text-brand-purple shrink-0" /> Curated Artists ({groupedArtists.length})
         </h3>
 
         <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 gap-3.5" style={{ alignContent: 'start' }}>
@@ -337,7 +337,7 @@ export function LibraryView({
                   type="button"
                   className="cursor-pointer bg-brand-purple/10 group-hover/artist-card:bg-brand-purple text-brand-purple group-hover/artist-card:text-white text-[9px] font-bold uppercase py-1.5 px-3 rounded-lg transition-all border border-brand-purple/20"
                 >
-                  View Tracks / عرض الأغاني
+                  View Tracks
                 </button>
               </div>
             );
@@ -347,13 +347,13 @@ export function LibraryView({
     );
   }
 
-  // View 6: Mix Center Tab (مكس)
+  // View 6: Mix Center Tab
   return (
     <div className="flex-1 bg-neutral-900/40 rounded-3xl p-4 md:p-6 flex flex-col h-[350px] md:h-full min-h-[300px] border border-white/5 overflow-hidden text-left animate-fadeIn">
       {renderTabsHeader()}
 
       <h3 className="text-[10px] font-black uppercase tracking-widest text-[#8A8A8A] mb-4 px-1 flex-shrink-0 flex items-center gap-2">
-        <Shuffle className="h-4 w-4 text-brand-purple shrink-0" /> PALESTRA MIX CENTER / مكس سنتر
+        <Shuffle className="h-4 w-4 text-brand-purple shrink-0" /> PALESTRA MIX CENTER
       </h3>
 
       <div className="flex-1 flex flex-col items-center justify-center p-4 text-center select-none">
@@ -369,7 +369,7 @@ export function LibraryView({
           <span className="absolute bottom-2 left-3 text-[7px] font-mono tracking-widest text-white/50">EQ-CENTER A-SIDE</span>
         </div>
 
-        <h4 className="text-sm font-bold text-white mb-2">Infinite Generation Loop / عشوائي مطلق</h4>
+        <h4 className="text-sm font-bold text-white mb-2">Infinite Generation Loop</h4>
         <p className="text-xs text-white/40 max-w-sm mb-4 leading-relaxed">
           Tired of selecting? Activate the Palestra Mix engine to run intelligent random blending, transition offsets, and randomized track sequencing.
         </p>
@@ -383,7 +383,7 @@ export function LibraryView({
           }}
           className="cursor-pointer bg-brand-purple hover:bg-brand-purple-dark text-white text-[10px] uppercase font-bold py-2.5 px-6 rounded-xl transition-all shadow-lg active:scale-95"
         >
-          Generate Absolute Shuffle / عشوائي بالكامل
+          Generate Absolute Shuffle
         </button>
       </div>
     </div>

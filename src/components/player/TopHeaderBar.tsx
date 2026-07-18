@@ -43,14 +43,14 @@ export function TopHeaderBar({
   onMiniToggle
 }: TopHeaderBarProps) {
   const navItems = [
-    { id: 'home', label: 'Home / الرئيسية', IconComponent: Home },
-    { id: 'search', label: 'Search / البحث', IconComponent: Search },
-    { id: 'songs', label: 'Songs / الأغاني', IconComponent: Music },
-    { id: 'albums', label: 'Albums / الألبومات', IconComponent: Disc },
-    { id: 'artists', label: 'Artists / الفنانين', IconComponent: User },
-    { id: 'mix', label: 'Mix / مكس', IconComponent: Shuffle },
-    { id: 'upload', label: 'Upload / رفع ملفات', IconComponent: UploadCloud },
-    { id: 'youtube', label: 'YouTube / يوتيوب', IconComponent: Youtube },
+    { id: 'home', label: 'Home', IconComponent: Home },
+    { id: 'search', label: 'Search', IconComponent: Search },
+    { id: 'songs', label: 'Songs', IconComponent: Music },
+    { id: 'albums', label: 'Albums', IconComponent: Disc },
+    { id: 'artists', label: 'Artists', IconComponent: User },
+    { id: 'mix', label: 'Mix', IconComponent: Shuffle },
+    { id: 'upload', label: 'Upload', IconComponent: UploadCloud },
+    { id: 'youtube', label: 'YouTube', IconComponent: Youtube },
   ];
 
   return (
@@ -65,7 +65,7 @@ export function TopHeaderBar({
               ? 'bg-brand-purple border-brand-purple/20 text-white shadow-lg shadow-brand-purple/20 hover:brightness-110' 
               : 'bg-white/5 border-white/10 text-white/50 hover:text-white hover:bg-white/10'
           }`}
-          title={isSidebarOpen ? "Collapse Sidebar / إغلاق الشريط الجانبي" : "Expand Sidebar / فتح الشريط الجانبي"}
+          title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
         >
           <Menu className="h-4.5 w-4.5" />
         </button>
@@ -120,94 +120,8 @@ export function TopHeaderBar({
         </div>
       </div>
 
-      {/* RIGHT: Compact Glassmorphic Audio Player Control Box */}
-      <div className="w-full md:w-auto md:max-w-xs xl:max-w-sm flex items-center justify-end select-none shrink-0">
-        {currentTrack ? (
-          <div className="w-full md:w-[240px] xl:w-[280px] bg-black/45 backdrop-blur-xl p-1.5 px-3 rounded-2xl flex items-center justify-between gap-2.5 shadow-[0_8px_32px_rgba(0,0,0,0.5)] border border-white/5 hover:border-brand-purple/20 transition-all duration-300 group">
-            
-            {/* Track metadata */}
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="relative shrink-0">
-                <img
-                  src={currentTrack.coverUrl}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className={`w-7.5 h-7.5 rounded-lg object-cover border border-white/10 shadow-sm group-hover:scale-105 transition-transform duration-300 ${
-                    isPlaying ? 'animate-spin-slow' : ''
-                  }`}
-                />
-                <span className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-black ${
-                  isPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                }`} />
-              </div>
-              <div className="overflow-hidden text-left leading-normal">
-                <h4 className="text-[11px] font-extrabold text-white leading-tight truncate">
-                  {currentTrack.title}
-                </h4>
-                <p className="text-[9px] text-[#8c8c8c] truncate leading-none mt-0.5">
-                  {currentTrack.artist}
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Media controls */}
-            <div className="flex items-center gap-1 shrink-0 bg-black/35 rounded-xl p-1 border border-white/5">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPrev();
-                }}
-                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer p-0.5"
-                title="Prev / السابق"
-              >
-                <SkipBack className="h-3.5 w-3.5" />
-              </button>
-              
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPlayPauseToggle();
-                }}
-                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center bg-brand-purple hover:scale-105 active:scale-95 text-white shadow-md transition-all cursor-pointer p-0.5"
-                title={isPlaying ? 'Pause / إيقاف' : 'Play / تشغيل'}
-              >
-                {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-0.5" />}
-              </button>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNext();
-                }}
-                className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer p-0.5"
-                title="Next / التالي"
-              >
-                <SkipForward className="h-3.5 w-3.5" />
-              </button>
-
-              {onMiniToggle && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMiniToggle();
-                  }}
-                  className="w-5.5 h-5.5 rounded-lg flex items-center justify-center text-white/50 hover:text-brand-purple hover:bg-white/5 transition-all cursor-pointer p-0.5 border border-transparent hover:border-brand-purple/10"
-                  title="Mini Player / المشغل المصغر"
-                >
-                  <Minimize2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="w-full md:w-[240px] xl:w-[280px] bg-black/25 p-1.5 px-3 rounded-2xl flex items-center justify-center text-[9px] text-[#6c6c6c] uppercase tracking-wider border border-white/5 select-none h-10.5">
-            <span className="flex items-center gap-1.5">
-              <Disc className="animate-spin text-[10px] text-brand-purple h-3.5 w-3.5" />
-              Select Track to listen / اختر أغنية
-            </span>
-          </div>
-        )}
-      </div>
+      {/* RIGHT: Removed as requested */}
+      <div className="w-0 md:w-auto select-none shrink-0" />
 
     </header>
   );

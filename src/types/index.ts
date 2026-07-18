@@ -10,6 +10,7 @@ export interface Track {
   isDemo?: boolean;
   source?: 'local' | 'youtube';
   youtubeId?: string;
+  isSaved?: boolean;
 }
 
 export interface PlayerState {

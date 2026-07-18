@@ -17,7 +17,8 @@ import {
   Music,
   Trash2,
   Layers,
-  ArrowLeft
+  ArrowLeft,
+  Bookmark
 } from 'lucide-react';
 
 interface YouTubeSearchViewProps {
@@ -26,6 +27,8 @@ interface YouTubeSearchViewProps {
   addTrack: (track: Track) => void;
   updateTrackLyrics: (id: string, lyrics: string) => void;
   addToast: (message: string, type: 'success' | 'info' | 'error') => void;
+  tracks: Track[];
+  onToggleSave: (trackId: string, isSaved: boolean) => void;
 }
 
 interface SearchResult {
@@ -275,7 +278,9 @@ export function YouTubeSearchView({
   onSelectTrack,
   currentTrackId,
   addTrack,
-  addToast
+  addToast,
+  tracks,
+  onToggleSave
 }: YouTubeSearchViewProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -285,6 +290,35 @@ export function YouTubeSearchView({
   const [hasSearched, setHasSearched] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
+  const handleToggleSaveTrack = (trackId: string, title: string, artist: string, thumbnail: string, videoId: string) => {
+    const existingTrack = tracks.find(t => t.id === trackId);
+    if (existingTrack) {
+      const newSavedState = !existingTrack.isSaved;
+      onToggleSave(trackId, newSavedState);
+      if (newSavedState) {
+        addToast(`Saved "${title}" to sidebar list!`, 'success');
+      } else {
+        addToast(`Removed "${title}" from sidebar list.`, 'info');
+      }
+    } else {
+      const newTrack: Track = {
+        id: trackId,
+        title: title,
+        artist: artist,
+        album: 'YouTube Stream',
+        audioUrl: videoId,
+        coverUrl: thumbnail || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17',
+        lyrics: '',
+        source: 'youtube',
+        youtubeId: videoId,
+        isSaved: true
+      };
+      addTrack(newTrack);
+      onToggleSave(trackId, true);
+      addToast(`Saved "${title}" to sidebar list!`, 'success');
+    }
+  };
+
   // Playlist States
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [playlistData, setPlaylistData] = useState<PlaylistData | null>(null);
@@ -293,28 +327,28 @@ export function YouTubeSearchView({
   const suggestedPlaylists: PlaylistResult[] = [
     { 
       playlistId: "PLofht4PTcTgNoP_t-pZsc667_07n-Z0Yw", 
-      title: "🎧 Lofi Chill Beats / لوفاي هادئ للدراسة والتركيز", 
+      title: "🎧 Lofi Chill Beats", 
       channelName: "Lofi Girl", 
       thumbnail: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
-      desc: "Cozy study beats / أجواء دراسة هادئة",
+      desc: "Cozy study beats",
       videoCount: 150,
       isPlaylist: true
     },
     { 
       playlistId: "PLMC9KNkIncKvYin_USF1qoJQnIyMAfRxl", 
-      title: "🔥 Top Hits 2026 / الأغاني التريند عالمياً", 
+      title: "🔥 Top Hits 2026", 
       channelName: "Chart Toppers", 
       thumbnail: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80",
-      desc: "Worldwide chart toppers / الأغاني الأكثر استماعاً",
+      desc: "Worldwide chart toppers",
       videoCount: 100,
       isPlaylist: true
     },
     { 
       playlistId: "PLofht4PTcTgM0K_t08n1Z2yv_rL-A1O7h", 
-      title: "🎸 Classical Chill / ألحان بيانو هادئة", 
+      title: "🎸 Classical Chill", 
       channelName: "Acoustic Vibes", 
       thumbnail: "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=400&q=80",
-      desc: "Acoustic & peaceful / ألحان كلاسيكية هادئة ومريحة",
+      desc: "Acoustic & peaceful",
       videoCount: 120,
       isPlaylist: true
     }
@@ -324,7 +358,7 @@ export function YouTubeSearchView({
     e.stopPropagation();
     const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
     setDownloadingId(item.videoId);
-    addToast(`جاري تحضير الأغنية للتحميل... / Preparing download for "${item.title}"`, 'info');
+    addToast(`Preparing download for "${item.title}"`, 'info');
 
     try {
       const response = await fetch('/api/download', {
@@ -352,7 +386,7 @@ export function YouTubeSearchView({
           document.body.appendChild(a);
           a.click();
           a.remove();
-          addToast(`✅ تم تحميل "${item.title}" بنجاح! / Downloaded successfully!`, 'success');
+          addToast(`✅ Downloaded "${item.title}" successfully!`, 'success');
           return;
         } else if (json.error) {
           throw new Error(json.error);
@@ -369,11 +403,11 @@ export function YouTubeSearchView({
       a.remove();
       URL.revokeObjectURL(url);
 
-      addToast(`✅ تم تحميل "${item.title}" بنجاح! / Downloaded successfully!`, 'success');
+      addToast(`✅ Downloaded "${item.title}" successfully!`, 'success');
     } catch (error: any) {
       console.error(error);
       const errorMsg = error.message ? `: ${error.message}` : '';
-      addToast(`❌ فشل تحميل الأغنية. الرجاء المحاولة مرة أخرى${errorMsg} / Download failed. Please try again.`, 'error');
+      addToast(`❌ Download failed. Please try again${errorMsg}`, 'error');
     } finally {
       setDownloadingId(null);
     }
@@ -450,7 +484,7 @@ export function YouTubeSearchView({
   const handleLoadPlaylist = async (playlistId: string) => {
     setPlaylistLoading(true);
     setPlaylistData(null);
-    addToast(`جاري تحميل قائمة التشغيل... / Loading playlist tracks...`, 'info');
+    addToast(`Loading playlist tracks...`, 'info');
 
     try {
       const res = await fetch(`/api/youtube-playlist?list=${playlistId}`);
@@ -473,7 +507,7 @@ export function YouTubeSearchView({
             duration: t.duration
           }))
         });
-        addToast(`Successfully loaded playlist "${p.title}" / تم تحميل قائمة التشغيل بنجاح`, "success");
+        addToast(`Successfully loaded playlist "${p.title}"`, "success");
       } else {
         throw new Error(data.error || "Playlist not found or empty.");
       }
@@ -526,7 +560,7 @@ export function YouTubeSearchView({
 
       setResults(searchResults);
       if (searchResults.length === 0) {
-        addToast("No tracks found for this search. Try other keywords. / لا توجد نتائج للبحث", "info");
+        addToast("No tracks found for this search. Try other keywords.", "info");
       }
     } catch (err: any) {
       console.error("YouTube search execution failed:", err);
@@ -570,7 +604,7 @@ export function YouTubeSearchView({
     };
 
     addTrack(newTrack);
-    addToast(`Added "${item.title}" to queue / قائمة التشغيل`, 'success');
+    addToast(`Added "${item.title}" to queue`, 'success');
   };
 
   const handlePlayAllPlaylist = () => {
@@ -600,7 +634,7 @@ export function YouTubeSearchView({
     const firstTrackId = `youtube-${firstTrack.videoId}`;
     onSelectTrack(firstTrackId);
 
-    addToast(`Playing entire playlist "${playlistData.title}"! / جاري تشغيل قائمة التشغيل بالكامل`, "success");
+    addToast(`Playing entire playlist "${playlistData.title}"!`, "success");
   };
 
   const handleQueueAllPlaylist = () => {
@@ -620,7 +654,7 @@ export function YouTubeSearchView({
       };
       addTrack(newTrack);
     });
-    addToast(`Added ${playlistData.tracks.length} tracks to queue! / تمت إضافة كل الأغاني لقائمة الانتظار`, "success");
+    addToast(`Added ${playlistData.tracks.length} tracks to queue!`, "success");
   };
 
   const clearResults = () => {
@@ -637,7 +671,7 @@ export function YouTubeSearchView({
         <div>
           <h2 className="text-sm md:text-base font-bold tracking-tight text-white flex items-center gap-2">
             <Youtube className="h-5 w-5 text-red-500 animate-pulse shrink-0" />
-            <span>YouTube Stream Engine / مشغل ومحمل يوتيوب</span>
+            <span>YouTube Stream Engine</span>
           </h2>
           <p className="text-[10px] md:text-xs text-white/40 mt-1">
             {playlistData 
@@ -652,7 +686,7 @@ export function YouTubeSearchView({
       {playlistLoading && (
         <div className="flex-1 flex flex-col items-center justify-center py-20 text-center animate-fadeIn">
           <Loader2 className="h-10 w-10 animate-spin text-brand-purple mb-4" />
-          <p className="text-sm font-bold text-white">Retrieving Playlist Tracks / جاري سحب الأغاني...</p>
+          <p className="text-sm font-bold text-white">Retrieving Playlist Tracks...</p>
           <p className="text-[11px] text-white/30 max-w-xs mt-1 leading-relaxed">
             Parsing list nodes from global api proxies. This process gathers tracks in high-fidelity list format.
           </p>
@@ -669,7 +703,7 @@ export function YouTubeSearchView({
               className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/90 hover:text-white rounded-xl text-xs font-bold border border-white/5 flex items-center gap-2 transition-all cursor-pointer shadow"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Back to Browse / رجوع للرئيسية</span>
+              <span>Back to Browse</span>
             </button>
           </div>
 
@@ -686,7 +720,7 @@ export function YouTubeSearchView({
                     <p className="text-[11px] text-white/40 mt-0.5 flex items-center gap-1.5">
                       <span>by {playlistData.author}</span>
                       <span className="w-1 h-1 bg-white/20 rounded-full" />
-                      <span className="text-brand-purple font-mono font-bold">{playlistData.videoCount} Tracks / أغنية</span>
+                      <span className="text-brand-purple font-mono font-bold">{playlistData.videoCount} Tracks</span>
                     </p>
                   </div>
                 </div>
@@ -698,14 +732,14 @@ export function YouTubeSearchView({
                     className="flex-1 md:flex-none py-2 px-4 bg-brand-purple hover:bg-brand-purple-light text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all duration-300"
                   >
                     <Play className="h-4 w-4 fill-current" />
-                    <span>Play All / تشغيل الكل</span>
+                    <span>Play All</span>
                   </button>
                   <button
                     onClick={handleQueueAllPlaylist}
                     className="flex-1 md:flex-none py-2 px-4 bg-white/5 hover:bg-white/10 border border-white/5 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all duration-300"
                   >
                     <Plus className="h-4 w-4" />
-                    <span>Queue All / إضافة للانتظار</span>
+                    <span>Queue All</span>
                   </button>
                 </div>
               </div>
@@ -714,7 +748,7 @@ export function YouTubeSearchView({
               <div className="space-y-1.5 bg-white/[0.01] border border-white/5 rounded-2xl p-1 md:p-2 overflow-hidden">
                 <div className="px-3.5 py-2 text-[9px] font-bold uppercase tracking-wider text-white/30 grid grid-cols-12 gap-2 border-b border-white/5">
                   <div className="col-span-1 text-center">#</div>
-                  <div className="col-span-8 md:col-span-9 text-left">Title / الأغنية</div>
+                  <div className="col-span-8 md:col-span-9 text-left">Title</div>
                   <div className="col-span-3 md:col-span-2 text-right">Duration / actions</div>
                 </div>
 
@@ -776,6 +810,28 @@ export function YouTubeSearchView({
                           >
                             <Plus className="h-3 w-3" />
                           </button>
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleSaveTrack(
+                                `youtube-${track.videoId}`,
+                                track.title,
+                                track.channelName,
+                                track.thumbnail,
+                                track.videoId || ""
+                              );
+                            }}
+                            className={`p-1 rounded-lg transition-all border cursor-pointer ${
+                              tracks.some(t => t.id === `youtube-${track.videoId}` && t.isSaved)
+                                ? 'text-brand-purple bg-brand-purple/10 border-brand-purple/20'
+                                : 'text-white/40 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                            }`}
+                            title={tracks.some(t => t.id === `youtube-${track.videoId}` && t.isSaved) ? "Remove from sidebar" : "Save to sidebar"}
+                          >
+                            <Bookmark className={`h-3 w-3 ${tracks.some(t => t.id === `youtube-${track.videoId}` && t.isSaved) ? 'fill-current' : ''}`} />
+                          </button>
+
                           <button
                             onClick={(e) => handleDownload(e, track)}
                             className="p-1 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-all border border-white/5 cursor-pointer"
@@ -801,7 +857,7 @@ export function YouTubeSearchView({
           {/* Quick Categories Browse Suggestion Pills */}
           <div className="flex-shrink-0 mb-4 overflow-x-auto scrollbar-none flex items-center gap-2 py-1">
             <span className="text-[10px] font-bold text-white/30 uppercase tracking-wider shrink-0 mr-1">
-              Quick Tags / تصفح سريع:
+              Quick Tags:
             </span>
             {quickTags.map((tag) => (
               <button
@@ -828,7 +884,7 @@ export function YouTubeSearchView({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search songs, artists OR paste YouTube Playlist URL here... (ابحث أو ضع رابط بلاي ليست)"
+                placeholder="Search songs, artists OR paste YouTube Playlist URL here..."
                 className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 text-white placeholder-white/30 text-xs md:text-sm pl-11 pr-11 py-3 rounded-2xl border border-white/5 focus:border-brand-purple/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/40 transition-all font-medium"
               />
               {query && (
@@ -848,7 +904,7 @@ export function YouTubeSearchView({
               className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs md:text-sm px-5 py-3 rounded-2xl flex items-center gap-2 font-bold cursor-pointer transition-all duration-300 disabled:opacity-50 shadow-lg shrink-0"
             >
               <Search className="h-4 w-4" />
-              <span>Search / تشغيل</span>
+              <span>Search</span>
             </button>
             
             {hasSearched && (
@@ -856,7 +912,7 @@ export function YouTubeSearchView({
                 type="button"
                 onClick={clearResults}
                 className="bg-white/5 hover:bg-white/10 border border-white/5 text-white/70 hover:text-white text-xs px-3 py-3 rounded-2xl cursor-pointer transition-all duration-300"
-                title="Return to Suggestions / رجوع للمقترحة"
+                title="Return to Suggestions"
               >
                 <XCircle className="h-4 w-4" />
               </button>
@@ -878,8 +934,8 @@ export function YouTubeSearchView({
                     <span className={`w-2 h-2 rounded-full ${hasSearched ? 'bg-brand-purple' : 'bg-red-500 animate-pulse'}`} />
                     <h3 className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-white/50">
                       {hasSearched 
-                        ? `Search Results / نتائج البحث (${results.length})` 
-                        : `⚡ Recommended Streams & Playlists / المقترحات والبلاي لست`
+                        ? `Search Results (${results.length})` 
+                        : `⚡ Recommended Streams & Playlists`
                       }
                     </h3>
                   </div>
@@ -914,7 +970,7 @@ export function YouTubeSearchView({
                         {/* Distinct badge stating Playlist */}
                         <div className="absolute top-2 left-2 bg-brand-purple text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg flex items-center gap-1 border border-brand-purple/35 shadow-sm">
                           <ListMusic className="h-3 w-3 shrink-0" />
-                          <span>Playlist / قائمة تشغيل</span>
+                          <span>Playlist</span>
                         </div>
 
                         {/* Tracks count indicator bottom-right */}
@@ -923,32 +979,32 @@ export function YouTubeSearchView({
                         </span>
                       </div>
 
-                      {/* Content details */}
-                      <div className="p-3 flex-1 flex flex-col justify-between">
-                        <div>
-                          <p className="text-xs font-bold line-clamp-2 leading-snug tracking-tight text-white group-hover:text-brand-purple-light transition-colors text-left" title={playlist.title}>
-                            {playlist.title}
-                          </p>
-                          <p className="text-[10px] text-white/45 truncate mt-1 text-left flex items-center gap-1">
-                            <CheckCircle2 className="text-brand-purple h-3 w-3 shrink-0" />
-                            <span>{playlist.channelName}</span>
-                          </p>
-                        </div>
+                        {/* Content details */}
+                        <div className="p-3 flex-1 flex flex-col justify-between">
+                          <div>
+                            <p className="text-xs font-bold line-clamp-2 leading-snug tracking-tight text-white group-hover:text-brand-purple-light transition-colors text-left" title={playlist.title}>
+                              {playlist.title}
+                            </p>
+                            <p className="text-[10px] text-white/45 truncate mt-1 text-left flex items-center gap-1">
+                              <CheckCircle2 className="text-brand-purple h-3 w-3 shrink-0" />
+                              <span>{playlist.channelName}</span>
+                            </p>
+                          </div>
 
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-white/5">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLoadPlaylist(playlist.playlistId);
-                            }}
-                            className="flex-1 py-1.5 px-2 rounded-xl text-[10px] font-bold bg-brand-purple/20 hover:bg-brand-purple text-white border border-brand-purple/30 transition-all cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <ListMusic className="h-3.5 w-3.5" />
-                            <span>View Tracks / فتح</span>
-                          </button>
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-white/5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLoadPlaylist(playlist.playlistId);
+                              }}
+                              className="flex-1 py-1.5 px-2 rounded-xl text-[10px] font-bold bg-brand-purple/20 hover:bg-brand-purple text-white border border-brand-purple/30 transition-all cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <ListMusic className="h-3.5 w-3.5" />
+                              <span>View Tracks</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
                     </div>
                   ))}
 
@@ -981,7 +1037,7 @@ export function YouTubeSearchView({
                             {/* Distinct badge stating Playlist */}
                             <div className="absolute top-2 left-2 bg-brand-purple text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg flex items-center gap-1 border border-brand-purple/35 shadow-sm">
                               <ListMusic className="h-3 w-3 shrink-0" />
-                              <span>Playlist / قائمة تشغيل</span>
+                              <span>Playlist</span>
                             </div>
 
                             {/* Tracks count indicator bottom-right */}
@@ -1012,7 +1068,7 @@ export function YouTubeSearchView({
                                 className="flex-1 py-1.5 px-2 rounded-xl text-[10px] font-bold bg-brand-purple/20 hover:bg-brand-purple text-white border border-brand-purple/30 transition-all cursor-pointer flex items-center justify-center gap-1"
                               >
                                 <ListMusic className="h-3.5 w-3.5" />
-                                <span>View Tracks / فتح</span>
+                                <span>View Tracks</span>
                               </button>
                             </div>
                           </div>
@@ -1101,10 +1157,31 @@ export function YouTubeSearchView({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleToggleSaveTrack(
+                                  `youtube-${item.videoId}`,
+                                  item.title,
+                                  item.channelName,
+                                  item.thumbnail,
+                                  item.videoId || ""
+                                );
+                              }}
+                              className={`p-1.5 rounded-xl transition-all border cursor-pointer flex items-center justify-center ${
+                                tracks.some(t => t.id === `youtube-${item.videoId}` && t.isSaved)
+                                  ? 'text-brand-purple bg-brand-purple/10 border-brand-purple/20'
+                                  : 'text-white/50 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                              }`}
+                              title={tracks.some(t => t.id === `youtube-${item.videoId}` && t.isSaved) ? "Remove from sidebar" : "Save to sidebar"}
+                            >
+                              <Bookmark className={`h-3.5 w-3.5 ${tracks.some(t => t.id === `youtube-${item.videoId}` && t.isSaved) ? 'fill-current' : ''}`} />
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handleAddToQueue(item);
                               }}
                               className="p-1.5 text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 cursor-pointer flex items-center justify-center"
-                              title="Add to queue / إضافة للانتظار"
+                              title="Add to queue"
                             >
                               <Plus className="h-3.5 w-3.5" />
                             </button>

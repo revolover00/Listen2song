@@ -66,7 +66,7 @@ export function UploadZone({
         type="file"
         ref={fileInputRef}
         onChange={handleFileChange}
-        accept=".mp3"
+        accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.webm,.opus"
         multiple
         className="hidden"
       />
@@ -120,7 +120,7 @@ export function UploadZone({
             Drag & Drop or Click to Upload Music
           </h3>
           <p className="text-xs text-white/40 max-w-sm mb-4 leading-relaxed">
-            Upload individual <span className="text-white">MP3 files</span> or drag in a <span className="text-white">ZIP archive</span> containing multiple songs. Everything stays private inside your browser container.
+            Upload individual <span className="text-white">audio files</span> (MP3, WAV, M4A, FLAC, OGG, etc.) or drag in a <span className="text-white">ZIP archive</span> containing multiple songs. Everything stays private inside your browser container.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
@@ -132,7 +132,7 @@ export function UploadZone({
               }}
               className="cursor-pointer flex-1 bg-brand-purple/10 hover:bg-brand-purple/20 text-brand-purple text-xs font-bold py-2.5 px-4 rounded-xl transition-all border border-brand-purple/20 flex items-center justify-center gap-2"
             >
-              <Music className="h-4.5 w-4.5" /> Select MP3s
+              <Music className="h-4.5 w-4.5" /> Select Audio
             </button>
             
             <button

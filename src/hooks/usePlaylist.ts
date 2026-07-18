@@ -20,6 +20,7 @@ export function usePlaylist() {
         let parsed: Track[] = [];
         if (stored) {
           parsed = JSON.parse(stored) as Track[];
+          parsed = parsed.filter(track => track && track.id && !track.id.startsWith('demo-') && !track.isDemo);
         } else {
           parsed = [...DEFAULT_TRACKS];
         }
@@ -171,7 +172,7 @@ export function usePlaylist() {
     }
   };
 
-  // Edit track metadata (وتغير اسامي الاغاني)
+  // Edit track metadata
   const updateTrackMetadata = (trackId: string, title: string, artist: string, album: string) => {
     setTracks((prev) => {
       const updated = prev.map((t) => {
@@ -214,7 +215,7 @@ export function usePlaylist() {
     });
   };
 
-  // Playlists section (تغيير اسامي البلاي ليست واضافه اغاني لها)
+  // Playlists section
   const createPlaylist = (name: string) => {
     const newPl: Playlist = {
       id: `playlist-${Date.now()}`,
@@ -443,13 +444,14 @@ export function usePlaylist() {
         return zipLyrics[lrcPath] || null;
       };
 
-      // 2. Scan ZIP for MP3 music files
+      // 2. Scan ZIP for playable audio files
+      const audioExtensions = /\.(mp3|wav|m4a|ogg|flac|aac|webm|opus)$/i;
       const fileNames = Object.keys(zipContents.files).filter(
-        name => name.toLowerCase().endsWith('.mp3') && !name.startsWith('__MACOSX')
+        name => audioExtensions.test(name) && !name.startsWith('__MACOSX')
       );
 
       if (fileNames.length === 0) {
-        throw new Error("No MP3 files found in ZIP archive.");
+        throw new Error("No playable audio files found in ZIP archive.");
       }
 
       const totalFiles = fileNames.length;
@@ -524,6 +526,26 @@ export function usePlaylist() {
     return newTracksList;
   };
 
+  const setTrackSaved = (trackId: string, isSaved: boolean) => {
+    setTracks((prev) => {
+      const updated = prev.map((t) => {
+        if (t.id === trackId) {
+          return {
+            ...t,
+            isSaved
+          };
+        }
+        return t;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEYS.PLAYLIST, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save updated track isSaved state:', e);
+      }
+      return updated;
+    });
+  };
+
   return {
     tracks,
     playlists,
@@ -542,6 +564,7 @@ export function usePlaylist() {
     addTrackToPlaylist,
     removeTrackFromPlaylist,
     updateTrackMetadata,
-    updateTrackLyrics
+    updateTrackLyrics,
+    setTrackSaved
   };
 }

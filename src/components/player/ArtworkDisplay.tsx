@@ -102,37 +102,7 @@ export function ArtworkDisplay({
         </div>
       )}
 
-      {/* QUICK 'NEXT >' OVERLAY PILL MATCHING SCREENSHOT */}
-      {upcomingTrack && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onNextTrackClick();
-          }}
-          className="absolute bottom-6 left-6 mx-0 max-w-[200px] md:max-w-[240px] glass-pill hover:bg-white/15 active:scale-95 text-white p-2.5 rounded-full flex items-center justify-between gap-3 transition-all cursor-pointer select-none group/pill pl-3 pr-4 shadow-lg"
-          title={`Play next: ${upcomingTrack.title}`}
-        >
-          <div className="flex items-center gap-2 overflow-hidden bg-transparent">
-            <img
-              src={upcomingTrack.coverUrl}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="w-5 h-5 rounded-full object-cover bg-white/10 group-hover/pill:rotate-45 transition-transform"
-            />
-            <div className="text-left overflow-hidden bg-transparent">
-              <p className="text-[10px] font-bold text-white/95 line-clamp-1 leading-normal">
-                {upcomingTrack.title}
-              </p>
-              <p className="text-[8px] text-white/50 line-clamp-1">
-                {upcomingTrack.artist}
-              </p>
-            </div>
-          </div>
-          <span className="text-[9px] font-bold uppercase text-brand-purple flex items-center shrink-0 bg-transparent">
-            Next <ChevronRight className="ml-1 h-3.5 w-3.5" />
-          </span>
-        </button>
-      )}
+      {/* QUICK 'NEXT >' OVERLAY PILL REMOVED PERMANENTLY */}
     </div>
   );
 }

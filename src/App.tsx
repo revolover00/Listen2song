@@ -41,7 +41,8 @@ export default function App() {
     addTrackToPlaylist,
     removeTrackFromPlaylist,
     updateTrackMetadata,
-    updateTrackLyrics
+    updateTrackLyrics,
+    setTrackSaved
   } = usePlaylist();
 
 
@@ -76,7 +77,10 @@ export default function App() {
     const tracksToImport = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (file.name.toLowerCase().endsWith('.mp3')) {
+      const lowerName = file.name.toLowerCase();
+      const isAudio = file.type.startsWith('audio/') || 
+                      /\.(mp3|wav|m4a|ogg|flac|aac|webm|opus)$/i.test(lowerName);
+      if (isAudio) {
         try {
           const track = await handleMp3Upload(file);
           tracksToImport.push(track);
@@ -87,7 +91,7 @@ export default function App() {
     }
     if (tracksToImport.length > 0) {
       addTracks(tracksToImport);
-      addToast(`Successfully imported ${tracksToImport.length} MP3 track(s)!`, 'success');
+      addToast(`Successfully imported ${tracksToImport.length} audio track(s)!`, 'success');
       setActiveSection('home');
     }
   };
@@ -184,7 +188,7 @@ export default function App() {
             onMuteToggle={player.toggleMute}
             onRestore={() => {
               setIsMiniPlayer(false);
-              addToast('Returned to full experience / تم استعادة المشغل الكامل', 'success');
+              addToast('Returned to full experience', 'success');
             }}
           />
         </div>
@@ -208,7 +212,7 @@ export default function App() {
           {/* Right Side: Primary Content Frame with interactive Top Bar */}
           <div className="flex-1 flex flex-col justify-between overflow-hidden p-3 md:p-6 gap-3 md:gap-6">
             
-            {/* Top Header Bar containing the integrated Mini Player Box (مربع تشغيل الأغاني) & Sidebar controls */}
+            {/* Top Header Bar containing the integrated Mini Player Box & Sidebar controls */}
             <TopHeaderBar
               currentTrack={player.currentTrack}
               isPlaying={player.isPlaying}
@@ -221,7 +225,7 @@ export default function App() {
               setIsSidebarOpen={setIsSidebarOpen}
               onMiniToggle={() => {
                 setIsMiniPlayer(true);
-                addToast('Switched to Mini Player / تم الانتقال للوضع المصغر', 'info');
+                addToast('Switched to Mini Player', 'info');
               }}
             />
 
@@ -269,6 +273,8 @@ export default function App() {
                   addTrack={addTrack}
                   updateTrackLyrics={updateTrackLyrics}
                   addToast={addToast}
+                  tracks={tracks}
+                  onToggleSave={setTrackSaved}
                 />
               )}
 
@@ -310,9 +316,22 @@ export default function App() {
                 onRepeatToggle={player.toggleRepeat}
                 onMiniToggle={() => {
                   setIsMiniPlayer(true);
-                  addToast('Switched to Mini Player / تم الانتقال للوضع المصغر', 'info');
+                  addToast('Switched to Mini Player', 'info');
                 }}
                 onToast={addToast}
+                isCurrentTrackSaved={player.currentTrack ? (tracks.find(t => t.id === player.currentTrack?.id)?.isSaved || false) : false}
+                onToggleSaveCurrent={() => {
+                  if (player.currentTrack) {
+                    const isCurrentlySaved = tracks.find(t => t.id === player.currentTrack?.id)?.isSaved || false;
+                    const newSavedState = !isCurrentlySaved;
+                    setTrackSaved(player.currentTrack.id, newSavedState);
+                    if (newSavedState) {
+                      addToast(`Saved "${player.currentTrack.title}" to sidebar list!`, 'success');
+                    } else {
+                      addToast(`Removed "${player.currentTrack.title}" from sidebar list.`, 'info');
+                    }
+                  }
+                }}
               />
             </div>
           </div>
@@ -327,7 +346,7 @@ export default function App() {
           onSave={(trackId, title, artist, album, lyrics) => {
             updateTrackMetadata(trackId, title, artist, album);
             updateTrackLyrics(trackId, lyrics);
-            addToast(`Song details and lyrics updated successfully! / تم تحديث بيانات وكلمات الأغنية بنجاح`, 'success');
+            addToast(`Song details and lyrics updated successfully!`, 'success');
           }}
         />
       )}

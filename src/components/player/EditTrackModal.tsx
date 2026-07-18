@@ -79,7 +79,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
 
           <div>
             <label className="block text-[9px] uppercase tracking-wider text-white/40 mb-1.5 font-bold px-1 text-left">
-              Song Name (العنوان)
+              Song Name
             </label>
             <input
               type="text"
@@ -93,7 +93,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
 
           <div>
             <label className="block text-[9px] uppercase tracking-wider text-white/40 mb-1.5 font-bold px-1 text-left">
-              Artist Name (الفنان)
+              Artist Name
             </label>
             <input
               type="text"
@@ -106,7 +106,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
 
           <div>
             <label className="block text-[9px] uppercase tracking-wider text-white/40 mb-1.5 font-bold px-1 text-left">
-              Album Name (الألبوم)
+              Album Name
             </label>
             <input
               type="text"
@@ -120,7 +120,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
           <div>
             <div className="flex items-center justify-between mb-1.5 px-1">
               <label className="text-[9px] uppercase tracking-wider text-white/40 font-bold">
-                Lyrics (كلمات الأغنية)
+                Lyrics
               </label>
               <div className="flex bg-white/5 rounded-lg p-0.5 border border-white/5 gap-0.5 text-[8px] font-bold">
                 <button
@@ -130,7 +130,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
                     lyricsMode === 'text' ? 'bg-brand-purple text-white shadow-sm' : 'text-white/40 hover:text-white'
                   }`}
                 >
-                  Text / كتابة
+                  Text
                 </button>
                 <button
                   type="button"
@@ -139,7 +139,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
                     lyricsMode === 'file' ? 'bg-brand-purple text-white shadow-sm' : 'text-white/40 hover:text-white'
                   }`}
                 >
-                  File / رفع ملف
+                  File
                 </button>
               </div>
             </div>
@@ -150,7 +150,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
                 onChange={(e) => setLyrics(e.target.value)}
                 rows={3}
                 className="w-full bg-[#161616]/80 text-white rounded-xl px-3 py-2 text-xs font-semibold border border-white/5 focus:outline-none focus:border-brand-purple focus:ring-1 focus:ring-brand-purple transition-all resize-y select-text"
-                placeholder="Paste lyrics here / الصق كلمات الأغنية هنا [00:15] Lyrics can have timestamps"
+                placeholder="Paste lyrics here [00:15] Lyrics can have timestamps"
               />
             ) : (
               <div className="space-y-2">
@@ -160,7 +160,7 @@ export function EditTrackModal({ track, onClose, onSave }: EditTrackModalProps) 
                 >
                   <Upload className="h-4 w-4 text-brand-purple animate-pulse" />
                   <span className="text-[10px] font-bold text-white/60">Choose LRC or TXT File</span>
-                  <span className="text-[8px] text-white/30">اضغط لرفع ملف الكلمات المتزامن (.lrc)</span>
+                  <span className="text-[8px] text-white/30">Click to upload synchronized lyrics file (.lrc)</span>
                   <input
                     ref={fileInputRef}
                     type="file"

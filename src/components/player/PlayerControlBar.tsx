@@ -13,7 +13,8 @@ import {
   Youtube, 
   Loader2, 
   Download,
-  Minimize2
+  Minimize2,
+  Bookmark
 } from 'lucide-react';
 
 interface PlayerControlBarProps {
@@ -35,6 +36,8 @@ interface PlayerControlBarProps {
   onRepeatToggle: () => void;
   onMiniToggle?: () => void;
   onToast?: (message: string, type: 'success' | 'info' | 'error') => void;
+  isCurrentTrackSaved?: boolean;
+  onToggleSaveCurrent?: () => void;
 }
 
 export function PlayerControlBar({
@@ -55,7 +58,9 @@ export function PlayerControlBar({
   onShuffleToggle,
   onRepeatToggle,
   onMiniToggle,
-  onToast
+  onToast,
+  isCurrentTrackSaved,
+  onToggleSaveCurrent
 }: PlayerControlBarProps) {
 
   const [downloadProgress, setDownloadProgress] = React.useState<string | null>(null);
@@ -68,7 +73,7 @@ export function PlayerControlBar({
     const videoUrl = `https://www.youtube.com/watch?v=${vId}`;
     setDownloadProgress('preparing');
     if (onToast) {
-      onToast(`جاري الاتصال بخادم التحميل وتحضير الأغنية... / Connecting to downloader...`, 'info');
+      onToast(`Connecting to downloader...`, 'info');
     }
 
     try {
@@ -98,7 +103,7 @@ export function PlayerControlBar({
           a.click();
           a.remove();
           if (onToast) {
-            onToast(`✅ تم تحميل "${track.title}" بنجاح! / Downloaded successfully!`, 'success');
+            onToast(`✅ Downloaded "${track.title}" successfully!`, 'success');
           }
           return;
         } else if (json.error) {
@@ -118,12 +123,12 @@ export function PlayerControlBar({
       URL.revokeObjectURL(url);
 
       if (onToast) {
-        onToast(`✅ تم تحميل "${track.title}" بنجاح! / Downloaded successfully!`, 'success');
+        onToast(`✅ Downloaded "${track.title}" successfully!`, 'success');
       }
     } catch (error) {
       console.error(error);
       if (onToast) {
-        onToast(`❌ فشل تحميل الأغنية. الرجاء المحاولة مرة أخرى / Download failed. Please try again.`, 'error');
+        onToast(`❌ Download failed. Please try again.`, 'error');
       }
     } finally {
       setDownloadProgress(null);
@@ -274,7 +279,7 @@ export function PlayerControlBar({
       <div className="flex items-center justify-end gap-3 w-full md:w-1/4 shrink-0 pr-1">
         <button
           onClick={onMuteToggle}
-          className="cursor-pointer text-xs text-white/50 hover:text-white transition-colors flex items-center justify-center"
+          className="cursor-pointer text-xs text-white/50 hover:text-white transition-colors flex items-center justify-center animate-hover"
           title={isMuted ? 'Unmute' : 'Mute'}
         >
           {isMuted || volume === 0 ? (
@@ -287,16 +292,22 @@ export function PlayerControlBar({
         <input
           type="range"
           min={0}
-          max={1}
+          max={3}
           step={0.01}
           value={isMuted ? 0 : volume}
           onChange={handleVolumeChange}
           className="w-full max-w-[70px] md:max-w-[80px] h-1 bg-white/10 rounded-lg appearance-none cursor-pointer outline-none accent-brand-purple"
           style={{
-            background: `linear-gradient(to right, var(--brand-purple, #7A4AFF) 0%, var(--brand-purple, #7A4AFF) ${(isMuted ? 0 : volume) * 100}%, rgba(255,255,255,0.1) ${(isMuted ? 0 : volume) * 100}%, rgba(255,255,255,0.1) 100%)`
+            background: volume > 1.0 
+              ? `linear-gradient(to right, var(--brand-purple, #7A4AFF) 0%, var(--brand-purple, #7A4AFF) 33.3%, #ff4d4d 33.3%, #ff4d4d ${((isMuted ? 0 : volume) / 3) * 100}%, rgba(255,255,255,0.1) ${((isMuted ? 0 : volume) / 3) * 100}%, rgba(255,255,255,0.1) 100%)`
+              : `linear-gradient(to right, var(--brand-purple, #7A4AFF) 0%, var(--brand-purple, #7A4AFF) ${((isMuted ? 0 : volume) / 3) * 100}%, rgba(255,255,255,0.1) ${((isMuted ? 0 : volume) / 3) * 100}%, rgba(255,255,255,0.1) 100%)`
           }}
-          title={`Volume: ${Math.round(volume * 100)}%`}
+          title={volume > 1 ? `Volume Boosted: ${Math.round(volume * 100)}%` : `Volume: ${Math.round(volume * 100)}%`}
         />
+
+        <span className={`text-[10px] font-mono min-w-[32px] text-left shrink-0 select-none transition-colors ${volume > 1 ? 'text-red-400 font-bold' : 'text-white/70'}`}>
+          {Math.round((isMuted ? 0 : volume) * 100)}%
+        </span>
 
         <button
           className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all ml-1 flex items-center justify-center"
@@ -309,7 +320,7 @@ export function PlayerControlBar({
           <button
             onClick={onMiniToggle}
             className="cursor-pointer text-xs text-white/50 hover:text-brand-purple hover:bg-brand-purple/10 p-1.5 rounded-lg transition-all ml-1 flex items-center justify-center border border-transparent hover:border-brand-purple/15"
-            title="Mini Player Mode / وضع المشغل المصغر"
+            title="Mini Player Mode"
           >
             <Minimize2 className="h-4 w-4" />
           </button>
@@ -317,13 +328,28 @@ export function PlayerControlBar({
 
         {currentTrack && (currentTrack.source === 'youtube' || currentTrack.id.startsWith('youtube-')) && (
           <div className="flex items-center gap-1">
+            {/* Save to Sidebar bookmark icon */}
+            {onToggleSaveCurrent && (
+              <button
+                onClick={onToggleSaveCurrent}
+                className={`cursor-pointer text-xs p-1.5 rounded-lg transition-all flex items-center justify-center ${
+                  isCurrentTrackSaved
+                    ? 'text-brand-purple bg-brand-purple/10'
+                    : 'text-white/50 hover:text-white hover:bg-white/5'
+                }`}
+                title={isCurrentTrackSaved ? 'Remove from sidebar' : 'Save to sidebar'}
+              >
+                <Bookmark className={`h-4 w-4 ${isCurrentTrackSaved ? 'fill-current' : ''}`} />
+              </button>
+            )}
+
             {/* Open on YouTube link */}
             <a
               href={`https://www.youtube.com/watch?v=${currentTrack.youtubeId || currentTrack.audioUrl}`}
               target="_blank"
               rel="noreferrer"
               className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all flex items-center justify-center"
-              title="Open on YouTube / فتح في يوتيوب"
+              title="Open on YouTube"
             >
               <Youtube className="h-4 w-4 text-red-500" />
             </a>
@@ -339,10 +365,10 @@ export function PlayerControlBar({
               }`}
               title={
                 downloadProgress === 'preparing'
-                  ? 'جاري التحضير للتحميل... / Preparing...'
+                  ? 'Preparing download...'
                   : downloadProgress === 'saving'
-                  ? 'جاري الحفظ على جهازك... / Saving...'
-                  : 'تحميل الأغنية كـ MP3 / Download MP3'
+                  ? 'Saving MP3...'
+                  : 'Download song as MP3'
               }
             >
               {downloadProgress === 'preparing' && <Loader2 className="h-4 w-4 animate-spin text-brand-purple" />}
