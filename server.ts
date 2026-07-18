@@ -5,6 +5,7 @@ import dns from "dns";
 import { generateLrcFromAudio, generateLrcFromText, fetchLyricsFromGemini } from "./server/lrcEngine";
 import { searchYouTubeOnServer } from "./server/youtubeSearch";
 import { handleDownload } from "./server/youtubeDownload";
+import { fetchYouTubePlaylistOnServer } from "./server/youtubePlaylist";
 
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
 dns.setDefaultResultOrder("ipv4first");
@@ -120,13 +121,13 @@ app.use((req, res, next) => {
       }
     }
 
-    // Phase 2: Cascading to Gemini 3.5 if OpenRouter is unconfigured, failed, or rate-limited
+    // Phase 2: Fallback plain lyrics finder using OpenRouter
     if (!lyricsText) {
       try {
-        console.log(`[PlainLyricsRequest] Requesting plain lyrics via Gemini 3.5 fallback for: "${song}"`);
+        console.log(`[PlainLyricsRequest] Requesting plain lyrics via OpenRouter fallback for: "${song}"`);
         lyricsText = await fetchLyricsFromGemini(song, artist);
-      } catch (geminiErr: any) {
-        console.error(`[PlainLyricsRequest] Gemini fallback failed:`, geminiErr.message || geminiErr);
+      } catch (fallbackErr: any) {
+        console.error(`[PlainLyricsRequest] Fallback failed:`, fallbackErr.message || fallbackErr);
       }
     }
 
@@ -181,7 +182,7 @@ app.use((req, res, next) => {
     }
   });
 
-  // 3. Audio-Based LRC Neural Speech Transcription Endpoint (via Google Gemini 3.5 Flash)
+  // 3. Audio-Based LRC Neural Speech Transcription Endpoint (Disabled)
   app.post("/api/generate-lrc-audio", rateLimiter, async (req: express.Request, res: express.Response) => {
     const { song, artist, plainLyrics, audioBase64, mimeType } = req.body;
 
@@ -204,13 +205,13 @@ app.use((req, res, next) => {
       res.json({
         success: true,
         lrc,
-        model: "gemini-3.5-flash"
+        model: "audio-synchronizer"
       });
     } catch (err: any) {
       console.error('[LRC Audio Sync Error]', err.message || err);
       res.status(500).json({
         success: false,
-        error: err.message || 'Failed to process audio tracking. Ensure GEMINI_API_KEY is configured in Settings.'
+        error: err.message || 'Failed to process audio tracking.'
       });
     }
   });
@@ -236,6 +237,32 @@ app.use((req, res, next) => {
       res.status(500).json({
         success: false,
         error: err.message || 'Failed to search YouTube videos.'
+      });
+    }
+  });
+
+  // YouTube Playlist Proxy Endpoint
+  app.get("/api/youtube-playlist", rateLimiter, async (req: express.Request, res: express.Response) => {
+    const listId = req.query.list;
+    if (!listId || typeof listId !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Playlist ID "list" is required / معرف قائمة التشغيل مطلوب'
+      });
+    }
+
+    try {
+      console.log(`[YouTubePlaylist API] Fetching playlist: ${listId}`);
+      const playlist = await fetchYouTubePlaylistOnServer(listId);
+      res.json({
+        success: true,
+        playlist
+      });
+    } catch (err: any) {
+      console.error('[YouTube Playlist Route Error]', err.message || err);
+      res.status(500).json({
+        success: false,
+        error: err.message || 'Failed to load YouTube playlist from proxy nodes.'
       });
     }
   });

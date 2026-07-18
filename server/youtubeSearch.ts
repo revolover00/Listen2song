@@ -1,96 +1,13 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-interface YouTubeVideo {
-  videoId: string;
+export interface YouTubeSearchResult {
+  videoId?: string;
+  playlistId?: string;
   title: string;
   channelName: string;
   thumbnail: string;
-  duration: string;
-}
-
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient(): GoogleGenAI | null {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      console.warn("[YouTubeSearch] GEMINI_API_KEY is not configured.");
-      return null;
-    }
-    aiClient = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
-    });
-  }
-  return aiClient;
-}
-
-async function searchYouTubeViaGemini(query: string): Promise<YouTubeVideo[]> {
-  const client = getAiClient();
-  if (!client) return [];
-
-  try {
-    console.log(`[YouTubeSearch] Directing search grounding via Gemini 3.5 for: "${query}"`);
-    const systemInstruction = `You are a specialized YouTube search assistant. Your job is to search Google/YouTube using your googleSearch tool for the query and extract a list of real, valid YouTube videos. 
-Ensure you return only real YouTube videoIds. Match videoIds like "dQw4w9WgXcQ" from actual YouTube URLs in your search results. Do not hallucinate or guess. Keep the durations realistic.`;
-
-    const response = await client.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: `Search YouTube for: "${query}". Return the top 10 relevant videos with real video IDs.`,
-      config: {
-        systemInstruction,
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              videoId: { type: Type.STRING, description: "The exact 11-character YouTube video ID" },
-              title: { type: Type.STRING, description: "The video title" },
-              channelName: { type: Type.STRING, description: "The channel/uploader name" },
-              thumbnail: { type: Type.STRING, description: "The thumbnail URL" },
-              duration: { type: Type.STRING, description: "The video duration in MM:SS format" }
-            },
-            required: ["videoId", "title", "channelName", "thumbnail", "duration"]
-          }
-        }
-      }
-    });
-
-    if (response.text) {
-      const results = JSON.parse(response.text.trim());
-      if (Array.isArray(results) && results.length > 0) {
-        const sanitized = results.map((item: any) => {
-          let videoId = item.videoId || "";
-          if (videoId.includes("youtube.com") || videoId.includes("youtu.be")) {
-            try {
-              const urlObj = new URL(videoId.startsWith("http") ? videoId : `https://${videoId}`);
-              videoId = urlObj.searchParams.get("v") || urlObj.pathname.split("/").pop() || videoId;
-            } catch (e) {
-              // Ignore parser error
-            }
-          }
-          videoId = videoId.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 11);
-          return {
-            videoId,
-            title: item.title || "Unknown Track",
-            channelName: item.channelName || "Unknown Artist",
-            thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : (item.thumbnail || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17"),
-            duration: item.duration || "3:00"
-          };
-        }).filter((item: any) => item.videoId && item.videoId.length === 11);
-
-        if (sanitized.length > 0) {
-          console.log(`[YouTubeSearch] Gemini search grounding successfully returned ${sanitized.length} high-fidelity results!`);
-          return sanitized;
-        }
-      }
-    }
-  } catch (err: any) {
-    console.error("[YouTubeSearch] Gemini search grounding failed:", err.message || err);
-  }
-  return [];
+  duration?: string;
+  videoCount?: number;
+  desc?: string;
+  isPlaylist?: boolean;
 }
 
 /**
@@ -122,21 +39,6 @@ function extractVideoRenderers(obj: any, list: any[] = [], seenIds: Set<string> 
 }
 
 /**
- * List of highly reliable and active public Invidious instances to use as fallback
- */
-const INVIDIOUS_INSTANCES = [
-  "yewtu.be",
-  "invidious.flokinet.to",
-  "iv.melmac.space",
-  "invidious.projectsegfaut.im",
-  "invidious.perennialte.ch",
-  "invidious.nerdvpn.de",
-  "invidio.xamh.de",
-  "invidious.lunar.icu",
-  "iv.ggtyler.dev"
-];
-
-/**
  * Robust fetch helper with timeout to avoid hanging on slow nodes
  */
 async function fetchWithTimeout(url: string, options: any = {}, timeoutMs = 3000) {
@@ -156,11 +58,11 @@ async function fetchWithTimeout(url: string, options: any = {}, timeoutMs = 3000
 }
 
 /**
- * Fetch search results from a single Invidious instance.
+ * Fetch search results from a single Invidious instance, requesting both videos and playlists.
  */
-async function searchSingleInvidious(instance: string, query: string): Promise<YouTubeVideo[]> {
-  const url = `https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
-  console.log(`[YouTubeSearch] Raced fetch launched for instance: ${instance}`);
+async function searchSingleInvidious(instance: string, query: string): Promise<YouTubeSearchResult[]> {
+  const url = `https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=all`;
+  console.log(`[YouTubeSearch] Raced fetch launched for Invidious instance: ${instance}`);
 
   const response = await fetchWithTimeout(
     url,
@@ -182,28 +84,41 @@ async function searchSingleInvidious(instance: string, query: string): Promise<Y
     throw new Error(`Instance ${instance} returned empty or invalid results`);
   }
 
-  const videos: YouTubeVideo[] = items
-    .filter((item: any) => item.type === 'video' && item.videoId)
+  const results: YouTubeSearchResult[] = items
     .map((item: any) => {
-      const seconds = item.lengthSeconds || 0;
-      const m = Math.floor(seconds / 60);
-      const s = Math.floor(seconds % 60);
-      const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
-      return {
-        videoId: item.videoId,
-        title: item.title || "Unknown Track",
-        channelName: item.author || "Unknown Artist",
-        thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
-        duration
-      };
-    });
+      if (item.type === 'video' && item.videoId) {
+        const seconds = item.lengthSeconds || 0;
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+        return {
+          videoId: item.videoId,
+          title: item.title || "Unknown Track",
+          channelName: item.author || "Unknown Artist",
+          thumbnail: `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`,
+          duration
+        };
+      } else if (item.type === 'playlist' && item.playlistId) {
+        return {
+          playlistId: item.playlistId,
+          title: item.title || "Unknown Playlist",
+          channelName: item.author || "YouTube Playlist",
+          thumbnail: item.playlistThumbnail || `https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80`,
+          videoCount: item.videoCount || 0,
+          desc: `Playlist by ${item.author || 'Creator'}`,
+          isPlaylist: true
+        };
+      }
+      return null;
+    })
+    .filter((item) => item !== null) as YouTubeSearchResult[];
 
-  if (videos.length === 0) {
-    throw new Error(`Instance ${instance} returned 0 valid video items`);
+  if (results.length === 0) {
+    throw new Error(`Instance ${instance} returned 0 valid items`);
   }
 
-  console.log(`[YouTubeSearch] Instance [${instance}] WON the search race with ${videos.length} results!`);
-  return videos;
+  console.log(`[YouTubeSearch] Instance [${instance}] WON the search race with ${results.length} results (including playlists)!`);
+  return results;
 }
 
 function parseVideoId(item: any): string | null {
@@ -224,10 +139,10 @@ function parseVideoId(item: any): string | null {
 }
 
 /**
- * Fetch search results from a single Piped instance.
+ * Fetch search results from a single Piped instance, requesting both streams and playlists.
  */
-async function searchSinglePiped(instance: string, query: string): Promise<YouTubeVideo[]> {
-  const url = `https://${instance}/search?q=${encodeURIComponent(query)}&filter=videos`;
+async function searchSinglePiped(instance: string, query: string): Promise<YouTubeSearchResult[]> {
+  const url = `https://${instance}/search?q=${encodeURIComponent(query)}&filter=all`;
   console.log(`[YouTubeSearch] Raced fetch launched for Piped instance: ${instance}`);
 
   const response = await fetchWithTimeout(
@@ -251,36 +166,55 @@ async function searchSinglePiped(instance: string, query: string): Promise<YouTu
     throw new Error(`Instance ${instance} returned empty or invalid results`);
   }
 
-  const videos: YouTubeVideo[] = items
-    .filter((item: any) => (item.type === 'stream' || item.type === 'video') && parseVideoId(item))
+  const results: YouTubeSearchResult[] = items
     .map((item: any) => {
-      const videoId = parseVideoId(item) || "";
-      const seconds = item.duration || 0;
-      const m = Math.floor(seconds / 60);
-      const s = Math.floor(seconds % 60);
-      const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
-      return {
-        videoId,
-        title: item.title || "Unknown Track",
-        channelName: item.uploaderName || item.channelName || "Unknown Artist",
-        thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-        duration
-      };
-    });
+      if ((item.type === 'stream' || item.type === 'video') && parseVideoId(item)) {
+        const videoId = parseVideoId(item) || "";
+        const seconds = item.duration || 0;
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+        return {
+          videoId,
+          title: item.title || "Unknown Track",
+          channelName: item.uploaderName || item.channelName || "Unknown Artist",
+          thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+          duration
+        };
+      } else if (item.type === 'playlist') {
+        let playlistId = item.playlistId;
+        if (!playlistId && item.url) {
+          const match = item.url.match(/[?&]list=([^&#]+)/);
+          playlistId = match ? match[1] : item.url.split('/').pop();
+        }
+        if (playlistId) {
+          return {
+            playlistId,
+            title: item.title || item.name || "Unknown Playlist",
+            channelName: item.uploaderName || "YouTube Playlist",
+            thumbnail: item.thumbnail || `https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80`,
+            videoCount: item.videos || item.videoCount || 0,
+            desc: `Playlist by ${item.uploaderName || 'Creator'}`,
+            isPlaylist: true
+          };
+        }
+      }
+      return null;
+    })
+    .filter((item) => item !== null) as YouTubeSearchResult[];
 
-  if (videos.length === 0) {
-    throw new Error(`Instance ${instance} returned 0 valid video items`);
+  if (results.length === 0) {
+    throw new Error(`Instance ${instance} returned 0 valid items`);
   }
 
-  console.log(`[YouTubeSearch] Piped instance [${instance}] WON the search race with ${videos.length} results!`);
-  return videos;
+  console.log(`[YouTubeSearch] Piped instance [${instance}] WON the search race with ${results.length} results (including playlists)!`);
+  return results;
 }
 
 /**
- * Queries a list of public Invidious and Piped API search endpoints IN PARALLEL to fetch YouTube videos
- * without getting blocked or triggering Vercel 10s Serverless timeouts.
+ * Queries a list of public Invidious and Piped API search endpoints IN PARALLEL to fetch YouTube videos and playlists
  */
-async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeVideo[]> {
+async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeSearchResult[]> {
   const invidiousInstances = [
     "yewtu.be",
     "invidious.flokinet.to",
@@ -306,9 +240,9 @@ async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeVideo[]
   ];
 
   const totalCount = invidiousInstances.length + pipedInstances.length;
-  console.log(`[YouTubeSearch] Starting parallel search race across ${totalCount} API proxy endpoints (Invidious & Piped)...`);
+  console.log(`[YouTubeSearch] Starting parallel search race across ${totalCount} API proxy endpoints for combined results...`);
 
-  return new Promise<YouTubeVideo[]>((resolve) => {
+  return new Promise<YouTubeSearchResult[]>((resolve) => {
     let resolved = false;
     let failedCount = 0;
     const errors: string[] = [];
@@ -322,7 +256,7 @@ async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeVideo[]
       }
     }, 5000);
 
-    const handleSuccess = (results: YouTubeVideo[]) => {
+    const handleSuccess = (results: YouTubeSearchResult[]) => {
       if (!resolved) {
         resolved = true;
         clearTimeout(safetyTimeout);
@@ -358,21 +292,10 @@ async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeVideo[]
 }
 
 /**
- * Searches YouTube for videos matching the query, using high-fidelity HTML scraping
- * of ytInitialData (no API key required).
+ * Searches YouTube for videos and playlists matching the query (Gemini is completely removed)
  */
-export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo[]> {
-  // Tier 1: Try Gemini Search Grounding first (highly reliable on Vercel/Cloud Run)
-  try {
-    const geminiResults = await searchYouTubeViaGemini(query);
-    if (geminiResults && geminiResults.length > 0) {
-      return geminiResults;
-    }
-  } catch (err: any) {
-    console.error("[YouTubeSearch] searchYouTubeViaGemini failed, falling back to proxy race:", err.message || err);
-  }
-
-  // Tier 2: Try lightweight, parallel Invidious + Piped API proxy race (bypasses direct Cloud Run IP blocks)
+export async function searchYouTubeOnServer(query: string): Promise<YouTubeSearchResult[]> {
+  // Tier 1: Try parallel Invidious + Piped API proxy race (returns both videos and playlists)
   try {
     const proxyResults = await searchYouTubeViaApiProxies(query);
     if (proxyResults && proxyResults.length > 0) {
@@ -382,11 +305,9 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
     console.error("[YouTubeSearch] searchYouTubeViaApiProxies failed, falling back to scraper:", err.message || err);
   }
 
-  // Tier 3: Scraping (last resort fallback, often soft-blocked on cloud host IPs but useful as general backup)
+  // Tier 2: Scraping fallback (returns videos as last resort)
   try {
-    // No sp filters to ensure maximum broad relevance / search is "محرية"
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    
     console.log(`[YouTubeSearch] Scraping results from: ${url}`);
     const response = await fetch(url, {
       headers: {
@@ -399,23 +320,17 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
       throw new Error(`YouTube returned status ${response.status}`);
     }
 
-    // Check for soft-blocks (200 response but no real content)
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('text/html')) {
-      console.warn('[YouTubeSearch] Unexpected content-type:', contentType);
       return await searchYouTubeViaApiProxies(query);
     }
 
     const html = await response.text();
-    
-    // Look for ytInitialData JSON object
     let ytInitialData: any = null;
-    // USE THIS — indexOf-based extraction handles huge JSON correctly
     const marker = 'ytInitialData = ';
     const startIdx = html.indexOf(marker);
     if (startIdx !== -1) {
       const jsonStart = startIdx + marker.length;
-      // Find the closing script tag boundary after the JSON
       const scriptEnd = html.indexOf(';</script>', jsonStart);
       const semiEnd = html.indexOf(';', jsonStart);
       const endIdx = scriptEnd !== -1 ? scriptEnd : semiEnd;
@@ -429,27 +344,17 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
       }
     }
 
-    // Also detect bot-detection / consent pages before processing
     if (!ytInitialData) {
-      const isConsentPage = html.includes('consent.youtube.com') || html.includes('www.google.com/sorry');
-      if (isConsentPage) {
-        console.warn('[YouTubeSearch] Bot detection / consent page returned. Results unavailable. Falling back to proxy API race...');
-      } else {
-        console.warn('[YouTubeSearch] Could not extract ytInitialData from response. Falling back to proxy API race...');
-      }
       return await searchYouTubeViaApiProxies(query);
     }
 
-    // Recursively extract all videoRenderer nodes present in the body to ensure we don't miss anything!
     const rawRenderers = extractVideoRenderers(ytInitialData);
-    
-    const videos: YouTubeVideo[] = [];
+    const videos: YouTubeSearchResult[] = [];
     for (const vr of rawRenderers) {
       const videoId = vr.videoId;
       const title = vr.title?.runs?.[0]?.text || vr.title?.simpleText || "Unknown Track";
       const channelName = vr.ownerText?.runs?.[0]?.text || vr.shortBylineText?.runs?.[0]?.text || "Unknown Artist";
       let thumbnail = vr.thumbnail?.thumbnails?.[0]?.url || "";
-      // Fix relative thumbnails or protocol omission
       if (thumbnail.startsWith('//')) {
         thumbnail = 'https:' + thumbnail;
       }
@@ -466,16 +371,12 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeVideo
       }
     }
 
-    console.log(`[YouTubeSearch] Successfully parsed ${videos.length} videos recursively.`);
     if (videos.length === 0) {
-      console.log('[YouTubeSearch] Scraping returned 0 videos. Falling back to proxy API race...');
       return await searchYouTubeViaApiProxies(query);
     }
-    // Return up to 15-20 results for a rich search experience, satisfying free-form request
     return videos.slice(0, 20);
   } catch (error: any) {
     console.error("[YouTubeSearch Server Error]", error.message || error);
-    console.log('[YouTubeSearch] Error encountered. Falling back to proxy API race...');
     return await searchYouTubeViaApiProxies(query);
   }
 }

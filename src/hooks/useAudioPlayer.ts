@@ -71,7 +71,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
             rel: 0,
             showinfo: 0,
             iv_load_policy: 3,
-            origin: window.location.origin
+            origin: typeof window !== 'undefined' && window.location.origin !== 'null' ? window.location.origin : undefined
           },
           events: {
             onReady: () => {
@@ -221,7 +221,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         audio.removeAttribute('src');
       }
     }
-  }, [currentTrackId, isYtReady, isPlaying]);
+  }, [currentTrackId, isYtReady, isPlaying, tracks]);
 
   // Synchronize playing state with player engines
   useEffect(() => {
@@ -247,7 +247,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         }
       }
     }
-  }, [isPlaying, currentTrackId]);
+  }, [isPlaying, currentTrackId, tracks]);
 
   // Poll YouTube playing states
   useEffect(() => {
@@ -268,7 +268,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
     }, 250);
 
     return () => clearInterval(interval);
-  }, [currentTrackId, isPlaying]);
+  }, [currentTrackId, isPlaying, tracks]);
 
   // Audio Event Listeners (Time updates, LoadedMetadata, Finished, Errors)
   useEffect(() => {

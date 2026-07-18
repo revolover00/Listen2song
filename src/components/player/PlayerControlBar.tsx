@@ -87,6 +87,25 @@ export function PlayerControlBar({
         throw new Error('Failed to download');
       }
 
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await response.json();
+        if (json.success && json.redirectUrl) {
+          const a = document.createElement('a');
+          a.href = json.redirectUrl;
+          a.download = `${track.title || 'audio'}.mp3`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          if (onToast) {
+            onToast(`✅ تم تحميل "${track.title}" بنجاح! / Downloaded successfully!`, 'success');
+          }
+          return;
+        } else if (json.error) {
+          throw new Error(json.error);
+        }
+      }
+
       setDownloadProgress('saving');
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
