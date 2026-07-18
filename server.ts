@@ -6,6 +6,7 @@ import { generateLrcFromAudio, generateLrcFromText, fetchLyricsFromGemini } from
 import { searchYouTubeOnServer } from "./server/youtubeSearch";
 import { handleDownload, handleStream } from "./server/youtubeDownload";
 import { fetchYouTubePlaylistOnServer } from "./server/youtubePlaylist";
+import { searchYouTubeMusic, getAlbumDetails, getArtistDetails, getLyricsForTrack } from "./server/youtubeMusicSearch";
 
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
 dns.setDefaultResultOrder("ipv4first");
@@ -245,6 +246,58 @@ app.use((req, res, next) => {
         success: false,
         error: err.message || 'Failed to search YouTube videos.'
       });
+    }
+  });
+
+  // 4.5. YouTube Music Endpoints
+  app.get("/api/ytmusic/search", rateLimiter, async (req: express.Request, res: express.Response) => {
+    const query = req.query.q;
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ success: false, error: 'Query is required' });
+    }
+    try {
+      const results = await searchYouTubeMusic(query);
+      res.json({ success: true, results });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/ytmusic/album/:id", rateLimiter, async (req: express.Request, res: express.Response) => {
+    try {
+      const details = await getAlbumDetails(req.params.id);
+      if (!details) return res.status(404).json({ success: false, error: 'Album not found' });
+      res.json({ success: true, album: details });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/ytmusic/artist/:id", rateLimiter, async (req: express.Request, res: express.Response) => {
+    try {
+      const details = await getArtistDetails(req.params.id);
+      if (!details) return res.status(404).json({ success: false, error: 'Artist not found' });
+      res.json({ success: true, artist: details });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.get("/api/ytmusic/lyrics", rateLimiter, async (req: express.Request, res: express.Response) => {
+    const { videoId, title, artist, duration } = req.query;
+    if (!videoId || !title || !artist) {
+      return res.status(400).json({ success: false, error: 'Missing parameters' });
+    }
+    try {
+      const lyrics = await getLyricsForTrack(
+        videoId as string, 
+        title as string, 
+        artist as string, 
+        parseInt(duration as string) || 0
+      );
+      res.json({ success: true, lyrics });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
     }
   });
 

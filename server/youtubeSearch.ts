@@ -1,3 +1,5 @@
+import { getInnertube } from './innertubeClient';
+
 export interface YouTubeSearchResult {
   videoId?: string;
   playlistId?: string;
@@ -216,27 +218,41 @@ async function searchSinglePiped(instance: string, query: string): Promise<YouTu
  */
 async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeSearchResult[]> {
   const invidiousInstances = [
+    "invidious.io",
     "yewtu.be",
-    "invidious.flokinet.to",
     "iv.melmac.space",
     "invidious.projectsegfaut.im",
+    "invidious.privacydev.net",
+    "invidious.tiekoetter.com",
     "invidious.perennialte.ch",
-    "invidious.nerdvpn.de",
-    "invidio.xamh.de",
     "iv.ggtyler.dev",
-    "invidious.lunar.icu"
+    "invidious.lunar.icu",
+    "invidious.snopyta.org",
+    "invidious.flokinet.to",
+    "invidio.xamh.de",
+    "invidious.materialistic.site",
+    "invidious.dhusch.de",
+    "invidious.mutatun.com",
+    "invidious.pistasjis.net",
+    "invidious.esmailelbob.xyz",
+    "iv.nboeck.de"
   ];
 
   const pipedInstances = [
     "pipedapi.kavin.rocks",
-    "pipedapi.tokhmi.xyz",
-    "api.piped.yt",
-    "piped-api.lule.io",
     "pipedapi.adminforge.de",
     "pipedapi.astphy.com",
     "pipedapi.swg.rocks",
-    "pipedapi.colby.school",
-    "pipedapi.us.to"
+    "pipedapi.official-esc.workers.dev",
+    "pipedapi.moomoo.me",
+    "pipedapi.rinu.moe",
+    "pipedapi.us.to",
+    "pipedapi.lule.io",
+    "pipedapi.leptons.xyz",
+    "pipedapi.mha.fi",
+    "pipedapi.tokhmi.xyz",
+    "piped-api.lule.io",
+    "pipedapi.silly.computer"
   ];
 
   const totalCount = invidiousInstances.length + pipedInstances.length;
@@ -295,20 +311,52 @@ async function searchYouTubeViaApiProxies(query: string): Promise<YouTubeSearchR
  * Searches YouTube for videos and playlists matching the query (Gemini is completely removed)
  */
 export async function searchYouTubeOnServer(query: string): Promise<YouTubeSearchResult[]> {
-  // Tier 1: Try parallel Invidious + Piped API proxy race (returns both videos and playlists)
+  // Tier 1: Try parallel Invidious + Piped API proxy race
   try {
     const proxyResults = await searchYouTubeViaApiProxies(query);
     if (proxyResults && proxyResults.length > 0) {
+      console.log(`[YouTubeSearch] Tier 1 SUCCESS (${proxyResults.length} results)`);
       return proxyResults;
     }
   } catch (err: any) {
-    console.error("[YouTubeSearch] searchYouTubeViaApiProxies failed, falling back to scraper:", err.message || err);
+    console.error("[YouTubeSearch] Tier 1 failed:", err.message || err);
   }
 
-  // Tier 2: Scraping fallback (returns videos as last resort)
+  // Tier 2: Innertube Fallback (High Quality, uses official client)
+  try {
+    console.log(`[YouTubeSearch] Tier 2: Falling back to Innertube for: ${query}`);
+    const client = await getInnertube();
+    const search = await client.search(query, { type: 'video' });
+    
+    if (search.results && search.results.length > 0) {
+      const results: YouTubeSearchResult[] = search.results
+        .map((item: any) => {
+          if (item.type === 'Video') {
+            return {
+              videoId: item.id,
+              title: item.title?.toString() || 'Unknown Track',
+              channelName: item.author?.name?.toString() || 'Unknown Artist',
+              thumbnail: item.thumbnails?.[0]?.url || `https://img.youtube.com/vi/${item.id}/mqdefault.jpg`,
+              duration: item.duration?.toString() || '0:00'
+            };
+          }
+          return null;
+        })
+        .filter(r => r !== null) as YouTubeSearchResult[];
+      
+      if (results.length > 0) {
+        console.log(`[YouTubeSearch] Tier 2 SUCCESS (${results.length} results)`);
+        return results;
+      }
+    }
+  } catch (err: any) {
+    console.error("[YouTubeSearch] Tier 2 failed:", err.message || err);
+  }
+
+  // Tier 3: Scraping fallback (Last resort)
   try {
     const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-    console.log(`[YouTubeSearch] Scraping results from: ${url}`);
+    console.log(`[YouTubeSearch] Tier 3: Scraping results from: ${url}`);
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',

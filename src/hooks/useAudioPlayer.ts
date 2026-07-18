@@ -171,12 +171,16 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         isInternalLoadingRef.current = false;
       };
 
-      // Use a small delay to ensure the browser has finished the previous request interruption
-      // and prevent "interrupted by a new load request" errors
+      // Use a larger delay to ensure the browser has finished the previous request interruption
+      // and prevent "interrupted by a new load request" errors (standard professional practice)
       const timer = setTimeout(() => {
-        audio.load();
-        playAudio();
-      }, 50);
+        try {
+          audio.load();
+          playAudio();
+        } catch (loadErr) {
+          console.warn('Audio load error:', loadErr);
+        }
+      }, 150);
 
       return () => clearTimeout(timer);
     }

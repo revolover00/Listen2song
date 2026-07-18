@@ -3,6 +3,7 @@ import ytdl from '@distube/ytdl-core';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import path from 'path';
+import { getInnertube } from './innertubeClient';
 
 if (ffmpegPath) {
   ffmpeg.setFfmpegPath(ffmpegPath);
@@ -18,11 +19,22 @@ export async function handleStream(req: express.Request, res: express.Response) 
       if (videoId) videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     }
 
-    if (!videoUrl || !ytdl.validateURL(videoUrl)) {
+    if (!videoUrl) {
       return res.status(400).json({ success: false, error: 'Invalid URL' });
     }
 
-    const videoId = ytdl.getURLVideoID(videoUrl);
+    let videoId = '';
+    try {
+      videoId = ytdl.getURLVideoID(videoUrl);
+    } catch (e) {
+      const match = videoUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+      videoId = match ? match[1] : '';
+    }
+
+    if (!videoId) {
+      return res.status(400).json({ success: false, error: 'Could not extract video ID' });
+    }
+
     console.log(`[youtubeStream] Streaming audio for: ${videoId}`);
 
     // Set headers for inline audio streaming
@@ -30,8 +42,7 @@ export async function handleStream(req: express.Request, res: express.Response) 
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.setHeader('Accept-Ranges', 'bytes');
 
-    // 1. TRY COBALT FIRST (Highly reliable)
-    // We reuse the Cobalt racing logic but specialized for getting a stream URL
+    // 1. TRY COBALT FIRST (Highly reliable, races multiple endpoints)
     const COBALT_ENDPOINTS = [
       'https://api.cobalt.tools/',
       'https://api.cobalt.tools/api/json',
@@ -41,15 +52,37 @@ export async function handleStream(req: express.Request, res: express.Response) 
       'https://co.wuk.sh/api/json',
       'https://cobalt.projectsegfaut.im/',
       'https://cobalt.projectsegfaut.im/api/json',
-      'https://cobalt.perennialte.ch/',
-      'https://cobalt.perennialte.ch/api/json'
+      'https://cobalt.popre.me/',
+      'https://cobalt.press/',
+      'https://cobalt.pro/',
+      'https://cobalt.wtf/',
+      'https://api.cobalt.sh/',
+      'https://cobalt.instinct.moe/',
+      'https://cobalt.zyr.me/',
+      'https://cobalt.silly.computer/',
+      'https://cobalt.bruh.social/',
+      'https://cobalt.goat.moe/',
+      'https://cobalt.rest/',
+      'https://cobalt.miz.li/',
+      'https://cobalt.neon.moe/',
+      'https://cobalt.qwed.me/',
+      'https://cobalt.perv.cat/',
+      'https://cobalt.buss.cat/',
+      'https://cobalt.lule.io/',
+      'https://cobalt.shite.xyz/',
+      'https://cobalt.astolfo.gay/',
+      'https://cobalt.fastness.casa/',
+      'https://co.disroot.org/',
+      'https://cobalt.canine.icu/',
+      'https://cobalt.the-best.computer/',
+      'https://cobalt.sweet.me/'
     ];
 
     const cobaltUrl = await new Promise<string | null>((resolve) => {
       let resolved = false;
       let finishedCount = 0;
       const controllers: AbortController[] = [];
-      const safetyTimeout = setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 6000);
+      const safetyTimeout = setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 20000);
 
       COBALT_ENDPOINTS.forEach((endpoint) => {
         const controller = new AbortController();
@@ -74,7 +107,7 @@ export async function handleStream(req: express.Request, res: express.Response) 
           headers: { 
             'Accept': 'application/json', 
             'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
           },
           body: JSON.stringify(body)
         })
@@ -107,15 +140,73 @@ export async function handleStream(req: express.Request, res: express.Response) 
 
     if (cobaltUrl) {
       console.log(`[youtubeStream] Cobalt won! Streaming from: ${cobaltUrl}`);
-      const streamRes = await fetch(cobaltUrl);
-      if (streamRes.ok && streamRes.body) {
-        const { Readable } = await import('stream');
-        Readable.fromWeb(streamRes.body as any).pipe(res);
-        return;
+      try {
+        const streamRes = await fetch(cobaltUrl);
+        if (streamRes.ok && streamRes.body) {
+          const { Readable } = await import('stream');
+          Readable.fromWeb(streamRes.body as any).pipe(res);
+          return;
+        }
+      } catch (err) {
+        console.warn(`[youtubeStream] Cobalt stream failed:`, err);
       }
     }
 
-    // 2. FALLBACK TO PIPED/INVIDIOUS
+    // 2. TRY INNERTUBE (Highly robust, tries multiple client types)
+    try {
+      console.log(`[youtubeStream] Trying Innertube for: ${videoId}`);
+      const client = await getInnertube();
+      
+      const clientsToTry: ('ANDROID' | 'TV_EMBEDDED' | 'WEB_EMBEDDED' | 'YTMUSIC' | 'WEB' | 'MWEB' | 'TV' | 'IOS')[] = 
+        ['TV', 'MWEB', 'IOS', 'TV_EMBEDDED', 'YTMUSIC', 'ANDROID', 'WEB_EMBEDDED', 'WEB'];
+      
+      let stream;
+      let lastErr: any = null;
+
+      for (const clientType of clientsToTry) {
+        try {
+          console.log(`[youtubeStream] Innertube trying client: ${clientType}`);
+          stream = await client.download(videoId, {
+            type: 'audio',
+            quality: 'best',
+            format: 'mp4',
+            client: clientType as any
+          });
+          if (stream) {
+            console.log(`[youtubeStream] Innertube ${clientType} SUCCESS!`);
+            break;
+          }
+        } catch (e: any) {
+          lastErr = e;
+          const errMsg = (e.message || e.toString());
+          console.warn(`[youtubeStream] Innertube ${clientType} failed for ${videoId}:`, errMsg);
+          
+          if (errMsg.includes('login required') || 
+              errMsg.includes('age restricted') || 
+              errMsg.includes('unavailable') ||
+              errMsg.includes('PlayerErrorCommand')) {
+            continue;
+          }
+        }
+      }
+
+      if (!stream) {
+        throw lastErr || new Error('All Innertube clients failed');
+      }
+      
+      const { Readable } = await import('stream');
+      const nodeStream = Readable.fromWeb(stream as any);
+
+      return ffmpeg(nodeStream)
+        .audioBitrate(128)
+        .toFormat('mp3')
+        .on('error', (err) => console.error('[youtubeStream] Innertube ffmpeg error:', err))
+        .pipe(res, { end: true });
+    } catch (err: any) {
+      console.warn(`[youtubeStream] Innertube totally failed for ${videoId}:`, err.message || err);
+    }
+
+    // 3. FALLBACK TO PIPED/INVIDIOUS
     const fallbackAudioUrl = await getFallbackAudioUrl(videoId);
     if (fallbackAudioUrl) {
       console.log(`[youtubeStream] Piped/Invidious fallback won!`);
@@ -126,31 +217,7 @@ export async function handleStream(req: express.Request, res: express.Response) 
         .pipe(res, { end: true });
     }
 
-    // 3. LAST RESORT: ytdl-core with anti-bot options
-    console.log(`[youtubeStream] Falling back to ytdl-core...`);
-    const ytStream = ytdl(videoUrl, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      highWaterMark: 1 << 25,
-      agent,
-      playerClients: ['IOS', 'ANDROID', 'TV'],
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://www.youtube.com/',
-          'Origin': 'https://www.youtube.com'
-        }
-      }
-    });
-
-    ffmpeg(ytStream)
-      .audioBitrate(128)
-      .toFormat('mp3')
-      .on('error', (err) => console.error('[youtubeStream] ffmpeg ytdl error:', err))
-      .pipe(res, { end: true });
-
+    return res.status(500).json({ success: false, error: 'All streaming attempts failed' });
   } catch (error: any) {
     console.error('[youtubeStream] Unexpected error:', error);
     if (!res.headersSent) res.status(500).end();
@@ -385,69 +452,10 @@ export async function handleDownload(req: express.Request, res: express.Response
       }
     }
 
-    // 3. LAST RESORT FALLBACK TO LOCAL YTDL-CORE
-    console.log('[youtubeDownload] Piped/Invidious fallback also failed. Proceeding with ytdl-core local fallback...');
-    
-    if (process.env.VERCEL === '1') {
-      return res.status(503).json({
-        success: false,
-        error: 'YouTube blocked download requests on Vercel server. Please try again or play directly in browser! / يوتيوب حظر الاتصال المباشر من سيرفر فيرسيل.'
-      });
-    }
-
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}.mp3`
-    );
-
-    // Get the audio stream from YouTube
-    const ytStream = ytdl(videoUrl, {
-      filter: 'audioonly',
-      quality: 'highestaudio',
-      highWaterMark: 1 << 25, // 32MB buffer to reduce throttling/stalls
-      playerClients: ['IOS', 'ANDROID', 'TV'],
-      agent,
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-      }
+    return res.status(500).json({
+      success: false,
+      error: 'All parallel Cobalt and proxy endpoints failed. Please try again later. / جميع محاولات التحميل فشلت، يرجى المحاولة لاحقاً.'
     });
-
-    ytStream.on('error', (err) => {
-      console.error('[youtubeDownload] ytdl-core stream error:', err);
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          error: `Bot detection / YouTube proxy restriction error: ${err.message}`
-        });
-      }
-    });
-
-    // Use fluent-ffmpeg to transcode to MP3 and pipe directly to response
-    ffmpeg(ytStream)
-      .audioBitrate(192) // high quality MP3 (192kbps)
-      .toFormat('mp3')
-      .on('start', (commandLine) => {
-        console.log('[youtubeDownload] Spawned ffmpeg with command: ' + commandLine);
-      })
-      .on('error', (err) => {
-        console.error('[youtubeDownload] Ffmpeg conversion error:', err);
-        if (!res.headersSent) {
-          res.status(500).json({
-            success: false,
-            error: `YouTube conversion blocked locally: ${err.message}`
-          });
-        }
-      })
-      .on('end', () => {
-        console.log('[youtubeDownload] Successfully completed audio conversion and sending.');
-      })
-      .pipe(res, { end: true });
-
   } catch (error: any) {
     console.error('[youtubeDownload] Unexpected download error:', error);
     if (!res.headersSent) {
