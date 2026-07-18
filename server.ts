@@ -4,7 +4,7 @@ import { createServer as createViteServer } from "vite";
 import dns from "dns";
 import { generateLrcFromAudio, generateLrcFromText, fetchLyricsFromGemini } from "./server/lrcEngine";
 import { searchYouTubeOnServer } from "./server/youtubeSearch";
-import { handleDownload } from "./server/youtubeDownload";
+import { handleDownload, handleStream } from "./server/youtubeDownload";
 import { fetchYouTubePlaylistOnServer } from "./server/youtubePlaylist";
 
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
@@ -274,9 +274,20 @@ app.use((req, res, next) => {
     }
   });
 
-  // 5. YouTube MP3/Audio Downloader Endpoints
+  // 5. YouTube MP3/Audio Downloader & Streaming Endpoints
   app.post("/download", rateLimiter, handleDownload);
   app.post("/api/download", rateLimiter, handleDownload);
+
+  // New Senior Feature: Direct Audio Streaming to bypass YouTube IFrame background restrictions
+  app.get("/api/audio-stream/:id", rateLimiter, async (req: express.Request, res: express.Response) => {
+    const videoId = req.params.id;
+    if (!videoId || videoId.length < 5) {
+      return res.status(400).json({ success: false, error: "Invalid Video ID" });
+    }
+
+    // Pass to the specialized streaming handler
+    handleStream(req, res);
+  });
 
   // Serve with Vite in development, static files in production
   if (process.env.NODE_ENV !== "production") {

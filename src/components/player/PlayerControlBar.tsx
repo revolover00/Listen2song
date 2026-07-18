@@ -305,9 +305,16 @@ export function PlayerControlBar({
           title={volume > 1 ? `Volume Boosted: ${Math.round(volume * 100)}%` : `Volume: ${Math.round(volume * 100)}%`}
         />
 
-        <span className={`text-[10px] font-mono min-w-[32px] text-left shrink-0 select-none transition-colors ${volume > 1 ? 'text-red-400 font-bold' : 'text-white/70'}`}>
-          {Math.round((isMuted ? 0 : volume) * 100)}%
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-mono min-w-[32px] text-left shrink-0 select-none transition-all duration-300 ${volume > 1 ? 'text-red-400 font-bold scale-110' : 'text-white/70'}`}>
+            {Math.round((isMuted ? 0 : volume) * 100)}%
+          </span>
+          {volume > 1 && !isMuted && (
+            <span className="text-[9px] font-black bg-red-500/20 text-red-500 px-1 rounded animate-pulse select-none">
+              BOOST
+            </span>
+          )}
+        </div>
 
         <button
           className="cursor-pointer text-xs text-white/50 hover:text-white hover:bg-white/5 p-1.5 rounded-lg transition-all ml-1 flex items-center justify-center"

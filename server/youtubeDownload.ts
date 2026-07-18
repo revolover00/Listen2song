@@ -10,6 +10,153 @@ if (ffmpegPath) {
 
 const agent = ytdl.createAgent();
 
+export async function handleStream(req: express.Request, res: express.Response) {
+  try {
+    let videoUrl = req.query.url as string;
+    if (!videoUrl) {
+      const videoId = req.params.id;
+      if (videoId) videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    }
+
+    if (!videoUrl || !ytdl.validateURL(videoUrl)) {
+      return res.status(400).json({ success: false, error: 'Invalid URL' });
+    }
+
+    const videoId = ytdl.getURLVideoID(videoUrl);
+    console.log(`[youtubeStream] Streaming audio for: ${videoId}`);
+
+    // Set headers for inline audio streaming
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    // 1. TRY COBALT FIRST (Highly reliable)
+    // We reuse the Cobalt racing logic but specialized for getting a stream URL
+    const COBALT_ENDPOINTS = [
+      'https://api.cobalt.tools/',
+      'https://api.cobalt.tools/api/json',
+      'https://cobalt.xyz/',
+      'https://cobalt.xyz/api/json',
+      'https://co.wuk.sh/',
+      'https://co.wuk.sh/api/json',
+      'https://cobalt.projectsegfaut.im/',
+      'https://cobalt.projectsegfaut.im/api/json',
+      'https://cobalt.perennialte.ch/',
+      'https://cobalt.perennialte.ch/api/json'
+    ];
+
+    const cobaltUrl = await new Promise<string | null>((resolve) => {
+      let resolved = false;
+      let finishedCount = 0;
+      const controllers: AbortController[] = [];
+      const safetyTimeout = setTimeout(() => { if (!resolved) { resolved = true; resolve(null); } }, 6000);
+
+      COBALT_ENDPOINTS.forEach((endpoint) => {
+        const controller = new AbortController();
+        controllers.push(controller);
+        
+        const isV10 = !endpoint.includes('/api/json');
+        const body = isV10 ? {
+          url: videoUrl,
+          downloadMode: 'audio',
+          audioFormat: 'mp3',
+          audioBitrate: '128'
+        } : {
+          url: videoUrl,
+          isAudioOnly: true,
+          audioFormat: 'mp3',
+          audioBitrate: '128'
+        };
+
+        fetch(endpoint, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 
+            'Accept': 'application/json', 
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+          },
+          body: JSON.stringify(body)
+        })
+        .then(async (r) => {
+          if (r.ok) {
+            const data: any = await r.json();
+            let url = data.url;
+            if (data.status === 'picker' && Array.isArray(data.picker) && data.picker.length > 0) {
+              url = data.picker[0].url;
+            }
+            if (url && !resolved) {
+              resolved = true;
+              clearTimeout(safetyTimeout);
+              controllers.forEach(c => { try { c.abort(); } catch(e){} });
+              resolve(url);
+            }
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          finishedCount++;
+          if (finishedCount === COBALT_ENDPOINTS.length && !resolved) {
+            resolved = true;
+            clearTimeout(safetyTimeout);
+            resolve(null);
+          }
+        });
+      });
+    });
+
+    if (cobaltUrl) {
+      console.log(`[youtubeStream] Cobalt won! Streaming from: ${cobaltUrl}`);
+      const streamRes = await fetch(cobaltUrl);
+      if (streamRes.ok && streamRes.body) {
+        const { Readable } = await import('stream');
+        Readable.fromWeb(streamRes.body as any).pipe(res);
+        return;
+      }
+    }
+
+    // 2. FALLBACK TO PIPED/INVIDIOUS
+    const fallbackAudioUrl = await getFallbackAudioUrl(videoId);
+    if (fallbackAudioUrl) {
+      console.log(`[youtubeStream] Piped/Invidious fallback won!`);
+      return ffmpeg(fallbackAudioUrl)
+        .audioBitrate(128)
+        .toFormat('mp3')
+        .on('error', (err) => console.error('[youtubeStream] ffmpeg error:', err))
+        .pipe(res, { end: true });
+    }
+
+    // 3. LAST RESORT: ytdl-core with anti-bot options
+    console.log(`[youtubeStream] Falling back to ytdl-core...`);
+    const ytStream = ytdl(videoUrl, {
+      filter: 'audioonly',
+      quality: 'highestaudio',
+      highWaterMark: 1 << 25,
+      agent,
+      playerClients: ['IOS', 'ANDROID', 'TV'],
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': '*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': 'https://www.youtube.com/',
+          'Origin': 'https://www.youtube.com'
+        }
+      }
+    });
+
+    ffmpeg(ytStream)
+      .audioBitrate(128)
+      .toFormat('mp3')
+      .on('error', (err) => console.error('[youtubeStream] ffmpeg ytdl error:', err))
+      .pipe(res, { end: true });
+
+  } catch (error: any) {
+    console.error('[youtubeStream] Unexpected error:', error);
+    if (!res.headersSent) res.status(500).end();
+  }
+}
+
 export async function handleDownload(req: express.Request, res: express.Response) {
   try {
     let { videoUrl, songTitle } = req.body;
