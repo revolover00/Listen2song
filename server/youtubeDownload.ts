@@ -12,13 +12,17 @@ const agent = ytdl.createAgent();
 
 export async function handleDownload(req: express.Request, res: express.Response) {
   try {
-    const { videoUrl, songTitle } = req.body;
+    let { videoUrl, songTitle } = req.body;
 
-    if (!videoUrl) {
+    if (!videoUrl || typeof videoUrl !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Video URL is required / رابط الفيديو مطلوب'
+        error: 'Video URL is required and must be a string / رابط الفيديو مطلوب ويجب أن يكون نصاً'
       });
+    }
+
+    if (songTitle && typeof songTitle !== 'string') {
+      songTitle = '';
     }
 
     // Validate YouTube URL

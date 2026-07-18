@@ -157,17 +157,20 @@ app.use((req, res, next) => {
 
   // 2. Text-Based LRC Synchronizer Endpoint (via OpenRouter NVIDIA Nemotron-3)
   app.post("/api/generate-lrc", rateLimiter, async (req: express.Request, res: express.Response) => {
-    const { song, artist, plainLyrics } = req.body;
+    let { song, artist, plainLyrics } = req.body;
 
-    if (!song) {
+    if (!song || typeof song !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Song title is required / اسم الأغنية مطلوب'
+        error: 'Song title is required and must be a string / اسم الأغنية مطلوب ويجب أن يكون نصاً'
       });
     }
 
+    artist = typeof artist === 'string' ? artist.trim() : '';
+    plainLyrics = typeof plainLyrics === 'string' ? plainLyrics.trim() : '';
+
     try {
-      const lrc = await generateLrcFromText(song, artist, plainLyrics);
+      const lrc = await generateLrcFromText(song.trim(), artist, plainLyrics);
       res.json({
         success: true,
         lrc,
@@ -184,24 +187,28 @@ app.use((req, res, next) => {
 
   // 3. Audio-Based LRC Neural Speech Transcription Endpoint (Disabled)
   app.post("/api/generate-lrc-audio", rateLimiter, async (req: express.Request, res: express.Response) => {
-    const { song, artist, plainLyrics, audioBase64, mimeType } = req.body;
+    let { song, artist, plainLyrics, audioBase64, mimeType } = req.body;
 
-    if (!song) {
+    if (!song || typeof song !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Song title is required / اسم الأغنية مطلوب'
+        error: 'Song title is required and must be a string / اسم الأغنية مطلوب ويجب أن يكون نصاً'
       });
     }
 
-    if (!audioBase64) {
+    if (!audioBase64 || typeof audioBase64 !== 'string') {
       return res.status(400).json({
         success: false,
-        error: 'Audio binary payload is required for neural tracking / ملف الصوت مطلوب لبدء المزامنة العصبية'
+        error: 'Audio binary payload is required for neural tracking and must be a string / ملف الصوت مطلوب لبدء المزامنة العصبية ويجب أن يكون نصاً'
       });
     }
+
+    artist = typeof artist === 'string' ? artist.trim() : '';
+    plainLyrics = typeof plainLyrics === 'string' ? plainLyrics.trim() : '';
+    mimeType = typeof mimeType === 'string' ? mimeType.trim() : 'audio/mp3';
 
     try {
-      const lrc = await generateLrcFromAudio(audioBase64, mimeType, song, artist, plainLyrics);
+      const lrc = await generateLrcFromAudio(audioBase64, mimeType, song.trim(), artist, plainLyrics);
       res.json({
         success: true,
         lrc,
