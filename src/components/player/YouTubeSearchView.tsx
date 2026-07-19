@@ -28,6 +28,7 @@ interface YouTubeSearchViewProps {
   updateTrackLyrics: (id: string, lyrics: string) => void;
   tracks: Track[];
   onToggleSave: (trackId: string, isSaved: boolean) => void;
+  addToast: (msg: string, type: 'success' | 'info' | 'error') => void;
 }
 
 interface SearchResult {
@@ -277,10 +278,10 @@ export function YouTubeSearchView({
   onSelectTrack,
   currentTrackId,
   addTrack,
+  addToast,
   tracks,
   onToggleSave
 }: YouTubeSearchViewProps) {
-  const addToast = (_msg: string, _type: string) => {};
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);

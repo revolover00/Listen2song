@@ -45,12 +45,16 @@ export default function App() {
     setTrackSaved
   } = usePlaylist();
 
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'error' | 'info' | 'success' } | null>(null);
 
-  // Triggering Toasts (Disabled)
-  const addToast = (_msg: string, _type: string) => {};
-  const removeToast = () => {};
+  const addToast = (text: string, type: 'error' | 'info' | 'success' = 'info') => {
+    setStatusMessage({ text, type });
+    console.log(`[${type.toUpperCase()}] ${text}`);
+    setTimeout(() => setStatusMessage(null), type === 'error' ? 6000 : 3000);
+  };
+  const removeToast = () => setStatusMessage(null);
 
-  const player = useAudioPlayer(tracks, (msg) => console.error(msg));
+  const player = useAudioPlayer(tracks, (msg) => addToast(msg, 'error'));
 
   const ytPlayerRef = useRef<ReactPlayer>(null);
 
@@ -61,7 +65,6 @@ export default function App() {
       if (wasPlaying && lastPosition > 0 && player.currentTrack) {
         player.seekTo(lastPosition);
         player.play();
-        addToast('Resumed where you left off', 'info');
       }
     } catch (e) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,13 +143,12 @@ export default function App() {
           const track = await handleMp3Upload(file);
           tracksToImport.push(track);
         } catch (e) {
-          addToast(`Error adding ${file.name}`, 'error');
+          console.error(`Error adding ${file.name}`, e);
         }
       }
     }
     if (tracksToImport.length > 0) {
       addTracks(tracksToImport);
-      addToast(`Successfully imported ${tracksToImport.length} audio track(s)!`, 'success');
       setActiveSection('home');
     }
   };
@@ -156,13 +158,10 @@ export default function App() {
       const extractedTracks = await handleZipUpload(file);
       if (extractedTracks.length > 0) {
         addTracks(extractedTracks);
-        addToast(`Extracted ${extractedTracks.length} song(s) from ZIP archive!`, 'success');
         setActiveSection('home');
-      } else {
-        addToast(`No playable files found.`, 'info');
       }
     } catch (e) {
-      addToast(`Could not extract ZIP. Verify structure.`, 'error');
+      console.error(`Could not extract ZIP. Verify structure.`, e);
     }
   };
 
@@ -170,7 +169,6 @@ export default function App() {
     const target = tracks.find(t => t.id === id);
     if (target) {
       deleteTrack(id);
-      addToast(`Permanently deleted "${target.title}" from library`, 'info');
       if (player.currentTrack?.id === id) {
         player.next();
       }
@@ -280,7 +278,6 @@ export default function App() {
               setIsSidebarOpen={setIsSidebarOpen}
               onMiniToggle={() => {
                 setIsMiniPlayer(true);
-                addToast('Switched to Mini Player', 'info');
               }}
             />
 
@@ -328,6 +325,7 @@ export default function App() {
                   addTrack={addTrack}
                   updateTrackLyrics={updateTrackLyrics}
                   tracks={tracks}
+                  addToast={addToast}
                   onToggleSave={setTrackSaved}
                 />
               )}
@@ -378,9 +376,9 @@ export default function App() {
                     const newSavedState = !isCurrentlySaved;
                     setTrackSaved(player.currentTrack.id, newSavedState);
                     if (newSavedState) {
-                      // Saved
+                      console.log(`Saved "${player.currentTrack.title}" to sidebar list!`);
                     } else {
-                      // Removed
+                      console.log(`Removed "${player.currentTrack.title}" from sidebar list.`);
                     }
                   }
                 }}
@@ -442,7 +440,19 @@ export default function App() {
         )}
       </div>
 
-      {/* Floating high contrast toast overlay */}
+      {statusMessage && (
+        <div
+          className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-sm font-medium shadow-lg backdrop-blur-md border ${
+            statusMessage.type === 'error'
+              ? 'bg-red-950/90 border-red-500/40 text-red-200'
+              : statusMessage.type === 'success'
+              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+              : 'bg-black/90 border-white/10 text-white/90'
+          }`}
+        >
+          {statusMessage.text}
+        </div>
+      )}
     </div>
   );
 }
