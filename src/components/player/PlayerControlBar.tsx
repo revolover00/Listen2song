@@ -33,7 +33,6 @@ interface PlayerControlBarProps {
   onShuffleToggle: () => void;
   onRepeatToggle: () => void;
   onMiniToggle?: () => void;
-  onToast?: (message: string, type: 'success' | 'info' | 'error') => void;
   isCurrentTrackSaved?: boolean;
   onToggleSaveCurrent?: () => void;
 }
@@ -56,7 +55,6 @@ export function PlayerControlBar({
   onShuffleToggle,
   onRepeatToggle,
   onMiniToggle,
-  onToast,
   isCurrentTrackSaved,
   onToggleSaveCurrent
 }: PlayerControlBarProps) {

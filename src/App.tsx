@@ -12,15 +12,13 @@ import { UploadZone } from './components/player/UploadZone';
 import { SearchView } from './components/player/SearchView';
 import { YouTubeSearchView } from './components/player/YouTubeSearchView';
 import { LibraryView } from './components/player/LibraryView';
-import { ToastContainer } from './components/ui/ToastContainer';
-import { ToastMessage, Track, Playlist } from './types';
+import { Track, Playlist } from './types';
 import { EditTrackModal } from './components/player/EditTrackModal';
 import { MiniPlayer } from './components/player/MiniPlayer';
 import { STORAGE_KEYS } from './constants';
 
 export default function App() {
   const [activeSection, setActiveSection] = useState('home');
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -48,26 +46,11 @@ export default function App() {
   } = usePlaylist();
 
 
-  // Triggering Toasts
-  const addToast = (message: string, type: 'success' | 'info' | 'error') => {
-    const newToast: ToastMessage = {
-      id: `toast-${Date.now()}-${Math.random()}`,
-      message,
-      type,
-      timestamp: Date.now()
-    };
-    setToasts((prev) => [...prev, newToast]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== newToast.id));
-    }, 4000);
-  };
+  // Triggering Toasts (Disabled)
+  const addToast = (_msg: string, _type: string) => {};
+  const removeToast = () => {};
 
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
-
-
-  const player = useAudioPlayer(tracks, (msg) => addToast(msg, 'error'));
+  const player = useAudioPlayer(tracks, (msg) => console.error(msg));
 
   const ytPlayerRef = useRef<ReactPlayer>(null);
 
@@ -314,7 +297,7 @@ export default function App() {
                   <LyricsWindow
                     currentTrack={player.currentTrack}
                     currentTime={player.currentTime}
-                    onToast={addToast}
+                    onToast={() => {}}
                     onEditCurrentTrack={() => player.currentTrack && setEditingTrack(player.currentTrack)}
                   />
                 </>
@@ -344,7 +327,6 @@ export default function App() {
                   currentTrackId={player.currentTrack?.id || null}
                   addTrack={addTrack}
                   updateTrackLyrics={updateTrackLyrics}
-                  addToast={addToast}
                   tracks={tracks}
                   onToggleSave={setTrackSaved}
                 />
@@ -388,9 +370,7 @@ export default function App() {
                 onRepeatToggle={player.toggleRepeat}
                 onMiniToggle={() => {
                   setIsMiniPlayer(true);
-                  addToast('Switched to Mini Player', 'info');
                 }}
-                onToast={addToast}
                 isCurrentTrackSaved={player.currentTrack ? (tracks.find(t => t.id === player.currentTrack?.id)?.isSaved || false) : false}
                 onToggleSaveCurrent={() => {
                   if (player.currentTrack) {
@@ -398,9 +378,9 @@ export default function App() {
                     const newSavedState = !isCurrentlySaved;
                     setTrackSaved(player.currentTrack.id, newSavedState);
                     if (newSavedState) {
-                      addToast(`Saved "${player.currentTrack.title}" to sidebar list!`, 'success');
+                      // Saved
                     } else {
-                      addToast(`Removed "${player.currentTrack.title}" from sidebar list.`, 'info');
+                      // Removed
                     }
                   }
                 }}
@@ -418,7 +398,6 @@ export default function App() {
           onSave={(trackId, title, artist, album, lyrics) => {
             updateTrackMetadata(trackId, title, artist, album);
             updateTrackLyrics(trackId, lyrics);
-            addToast(`Song details and lyrics updated successfully!`, 'success');
           }}
         />
       )}
@@ -452,7 +431,6 @@ export default function App() {
             onEnded={player.handleTrackEnded}
             onError={(err) => {
               console.error('[ReactPlayer] YouTube playback error:', err);
-              addToast('Could not play this track from YouTube. Skipping...', 'error');
               player.next();
             }}
             config={{
@@ -465,7 +443,6 @@ export default function App() {
       </div>
 
       {/* Floating high contrast toast overlay */}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

@@ -23,13 +23,6 @@ export interface PlayerState {
   isRepeat: 'none' | 'all' | 'one';
 }
 
-export interface ToastMessage {
-  id: string;
-  message: string;
-  type: 'success' | 'info' | 'error';
-  timestamp: number;
-}
-
 export interface Playlist {
   id: string;
   name: string;

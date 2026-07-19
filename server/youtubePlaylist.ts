@@ -159,31 +159,33 @@ async function fetchPipedPlaylist(instance: string, playlistId: string): Promise
   };
 }
 
+const playlistCache = new Map<string, { data: PlaylistDetails; timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+
 /**
  * Races multiple public Invidious & Piped APIs to fetch YouTube Playlists
  */
 export async function fetchYouTubePlaylistOnServer(playlistId: string): Promise<PlaylistDetails> {
+  const cached = playlistCache.get(playlistId);
+  if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+    console.log(`[YouTubePlaylist] Serving from cache for Playlist ID: ${playlistId}`);
+    return cached.data;
+  }
+
   const invidiousInstances = [
     "yewtu.be",
-    "invidious.flokinet.to",
-    "iv.melmac.space",
-    "invidious.projectsegfaut.im",
-    "invidious.perennialte.ch",
+    "invidious.privacydev.net",
+    "invidious.lunar.icu",
     "invidious.nerdvpn.de",
-    "invidio.xamh.de",
-    "invidious.lunar.icu"
+    "iv.melmac.space",
+    "invidious.flokinet.to"
   ];
 
   const pipedInstances = [
-    "pipedapi.kavin.rocks",
-    "pipedapi.tokhmi.xyz",
-    "api.piped.yt",
-    "piped-api.lule.io",
-    "pipedapi.adminforge.de",
-    "pipedapi.astphy.com",
-    "pipedapi.swg.rocks",
-    "pipedapi.colby.school",
-    "pipedapi.us.to"
+    "piped.video",
+    "piped.kavin.rocks",
+    "piped.projectsegfaut.im",
+    "piped.adminforge.de"
   ];
 
   const totalCount = invidiousInstances.length + pipedInstances.length;
@@ -206,6 +208,10 @@ export async function fetchYouTubePlaylistOnServer(playlistId: string): Promise<
         resolved = true;
         clearTimeout(safetyTimeout);
         console.log(`[YouTubePlaylist] Playlist retrieved successfully from [${type}:${instance}] with ${result.tracks.length} tracks!`);
+        
+        // Cache the result
+        playlistCache.set(playlistId, { data: result, timestamp: Date.now() });
+        
         resolve(result);
       }
     };
@@ -216,6 +222,15 @@ export async function fetchYouTubePlaylistOnServer(playlistId: string): Promise<
       if (failedCount === totalCount && !resolved) {
         resolved = true;
         clearTimeout(safetyTimeout);
+        
+        // Try fallback to cached data even if expired
+        const cached = playlistCache.get(playlistId);
+        if (cached) {
+          console.log(`[YouTubePlaylist] All nodes failed, falling back to cached data for Playlist ID: ${playlistId}`);
+          resolve(cached.data);
+          return;
+        }
+
         reject(new Error(`Failed to load YouTube playlist from all available proxy nodes. Details: ${errors.slice(0, 3).join(' | ')}`));
       }
     };
