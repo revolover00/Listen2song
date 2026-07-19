@@ -367,12 +367,25 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
 
   const pause = () => {
     setIsPlaying(false);
+    try { localStorage.setItem(STORAGE_KEYS.WAS_PLAYING, 'false'); } catch (e) {}
   };
 
   const togglePlay = () => {
     if (isPlaying) pause();
     else play();
   };
+
+  // Senior Engineering: Save position periodically
+  useEffect(() => {
+    if (!isPlaying) return;
+    const interval = setInterval(() => {
+      try {
+        localStorage.setItem(STORAGE_KEYS.LAST_POSITION, String(currentTime));
+        localStorage.setItem(STORAGE_KEYS.WAS_PLAYING, 'true');
+      } catch (e) {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isPlaying, currentTime]);
 
   const selectTrack = (id: string) => {
     const track = tracks.find(t => t.id === id);

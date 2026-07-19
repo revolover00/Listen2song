@@ -16,6 +16,7 @@ import { ToastContainer } from './components/ui/ToastContainer';
 import { ToastMessage, Track, Playlist } from './types';
 import { EditTrackModal } from './components/player/EditTrackModal';
 import { MiniPlayer } from './components/player/MiniPlayer';
+import { STORAGE_KEYS } from './constants';
 
 export default function App() {
   const [activeSection, setActiveSection] = useState('home');
@@ -69,6 +70,63 @@ export default function App() {
   const player = useAudioPlayer(tracks, (msg) => addToast(msg, 'error'));
 
   const ytPlayerRef = useRef<ReactPlayer>(null);
+
+  useEffect(() => {
+    try {
+      const wasPlaying = localStorage.getItem(STORAGE_KEYS.WAS_PLAYING) === 'true';
+      const lastPosition = parseFloat(localStorage.getItem(STORAGE_KEYS.LAST_POSITION) || '0');
+      if (wasPlaying && lastPosition > 0 && player.currentTrack) {
+        player.seekTo(lastPosition);
+        player.play();
+        addToast('Resumed where you left off', 'info');
+      }
+    } catch (e) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Senior Engineering Note: React state-driven `playing` prop changes can stall
+  // in a backgrounded tab because React's own scheduler is throttled there too.
+  // We bypass React entirely for this recovery path and command the underlying
+  // YT.Player instance directly via getInternalPlayer() (react-player v2 API).
+  useEffect(() => {
+    const forceResumeIfNeeded = () => {
+      const isYt = player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-');
+      if (!isYt || !player.isPlaying || !ytPlayerRef.current) return;
+
+      try {
+        const internalPlayer = ytPlayerRef.current.getInternalPlayer();
+        if (internalPlayer && typeof internalPlayer.getPlayerState === 'function') {
+          const state = internalPlayer.getPlayerState();
+          // YT.PlayerState: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
+          if (state === 2 || state === -1 || state === 5) {
+            internalPlayer.playVideo();
+          }
+        }
+      } catch (err) {
+        // Internal player not ready yet (iframe still loading) — safe to ignore, next tick will retry
+      }
+    };
+
+    const handleVisibility = () => {
+      forceResumeIfNeeded();
+      // YouTube sometimes pauses itself a moment after the visibility event fires,
+      // not exactly at the same tick — a short delayed re-check catches that.
+      setTimeout(forceResumeIfNeeded, 500);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Periodic watchdog: catches silent self-pauses from YouTube's own internal
+    // logic even when no visibility event fired at all (e.g. window minimized,
+    // OS-level focus loss on some platforms doesn't always fire visibilitychange
+    // reliably). 3s interval is frequent enough to feel instant to the user,
+    // infrequent enough to not add meaningful CPU/battery cost.
+    const watchdog = setInterval(forceResumeIfNeeded, 3000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(watchdog);
+    };
+  }, [player.isPlaying, player.currentTrack?.id]);
 
   // Sync ReactPlayer seek
   const onSeek = (time: number) => {
@@ -365,25 +423,42 @@ export default function App() {
         />
       )}
 
-      {/* Hidden React Player for YouTube playback */}
-      <div className="pointer-events-none opacity-0 invisible absolute h-0 w-0 overflow-hidden">
+      {/* Hidden React Player for YouTube playback — must have real (tiny) dimensions,
+    NOT zero size + visibility:hidden, or YouTube's own player will pause itself
+    thinking the video isn't visible, even within the same active tab. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'fixed',
+          top: '-9999px',
+          left: '-9999px',
+          width: '2px',
+          height: '2px',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        }}
+      >
         {(player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-')) && (
           <ReactPlayer
             ref={ytPlayerRef}
             url={`https://www.youtube.com/watch?v=${player.currentTrack.youtubeId || player.currentTrack.audioUrl}`}
             playing={player.isPlaying}
-            volume={player.volume}
+            volume={Math.min(1, player.volume)}
             muted={player.isMuted}
-            onProgress={(progress) => {
-              // Only update if not seeking to avoid feedback loops
-              player.setCurrentTime(progress.playedSeconds);
-            }}
+            width="2px"
+            height="2px"
+            onProgress={(progress) => player.setCurrentTime(progress.playedSeconds)}
             onDuration={(duration) => player.setDuration(duration)}
             onEnded={player.handleTrackEnded}
+            onError={(err) => {
+              console.error('[ReactPlayer] YouTube playback error:', err);
+              addToast('Could not play this track from YouTube. Skipping...', 'error');
+              player.next();
+            }}
             config={{
               youtube: {
-                playerVars: { autoplay: 1, controls: 0, showinfo: 0, rel: 0, modestbranding: 1 }
-              }
+                playerVars: { autoplay: 1, controls: 0, showinfo: 0, rel: 0, modestbranding: 1 },
+              },
             }}
           />
         )}
