@@ -68,11 +68,28 @@ export function PlayerControlBar({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const currentPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const [localTime, setLocalTime] = React.useState<number | null>(null);
+  const [isDragging, setIsDragging] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isDragging) {
+      setLocalTime(currentTime);
+    }
+  }, [currentTime, isDragging]);
 
   const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = parseFloat(e.target.value);
-    onSeek(value);
+    setLocalTime(parseFloat(e.target.value));
+  };
+
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = () => {
+    if (localTime !== null) {
+      onSeek(localTime);
+    }
+    setIsDragging(false);
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,7 +158,9 @@ export function PlayerControlBar({
           {/* Main Play/Pause Button */}
           <button
             onClick={onPlayPauseToggle}
-            className="cursor-pointer bg-white text-black h-10 w-10 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shrink-0 p-2.5"
+            disabled={!currentTrack}
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+            className={`cursor-pointer bg-white text-black h-10 w-10 rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md shrink-0 p-2.5 ${!currentTrack ? 'opacity-50 cursor-not-allowed' : ''}`}
             title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? (
@@ -180,18 +199,22 @@ export function PlayerControlBar({
         {/* Progress bar line */}
         <div className="w-full max-w-sm flex items-center gap-2">
           <span className="text-[10px] text-white/40 font-mono select-none w-8 text-right shrink-0">
-            {formatTime(currentTime)}
+            {formatTime(localTime ?? currentTime)}
           </span>
           <div className="flex-1 relative group flex items-center">
             <input
               type="range"
               min={0}
               max={duration || 100}
-              value={currentTime}
+              value={localTime ?? currentTime}
               onChange={handleProgressChange}
+              onMouseDown={handleDragStart}
+              onMouseUp={handleDragEnd}
+              onTouchStart={handleDragStart}
+              onTouchEnd={handleDragEnd}
               className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer outline-none accent-brand-purple group-hover:bg-white/20 transition-all [&::-webkit-slider-runnable-track]:bg-transparent"
               style={{
-                background: `linear-gradient(to right, var(--brand-purple, #7A4AFF) 0%, var(--brand-purple, #7A4AFF) ${currentPercent}%, rgba(255,255,255,0.1) ${currentPercent}%, rgba(255,255,255,0.1) 100%)`
+                background: `linear-gradient(to right, var(--brand-purple, #7A4AFF) 0%, var(--brand-purple, #7A4AFF) ${(duration > 0 ? ((localTime ?? currentTime) / duration) * 100 : 0)}%, rgba(255,255,255,0.1) ${(duration > 0 ? ((localTime ?? currentTime) / duration) * 100 : 0)}%, rgba(255,255,255,0.1) 100%)`
               }}
             />
           </div>

@@ -36,3 +36,11 @@ export interface Playlist {
   trackIds: string[];
 }
 
+export interface PlayHistoryEntry {
+  trackId: string;
+  title: string;
+  artist: string;
+  source: 'local' | 'youtube';
+  playedAt: number;
+}
+

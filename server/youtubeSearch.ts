@@ -10,6 +10,34 @@ export interface YouTubeSearchResult {
   isPlaylist?: boolean;
 }
 
+const EXCLUDE_KEYWORDS = [
+  'live', 'trailer', 'interview', 'reaction', 'tutorial', 'how to',
+  'unboxing', 'review', 'gameplay', 'highlights', 'teaser',
+  'behind the scenes', 'podcast', 'episode', 'vlog', 'shorts',
+  'full match', 'press conference', 'documentary'
+];
+
+function isLikelySong(item: YouTubeSearchResult): boolean {
+  if (item.isPlaylist) return true;
+
+  const title = (item.title || '').toLowerCase();
+  if (EXCLUDE_KEYWORDS.some(kw => title.includes(kw))) return false;
+
+  if (item.duration) {
+    const parts = item.duration.split(':').map(Number);
+    const seconds = parts.length === 2
+      ? parts[0] * 60 + parts[1]
+      : parts.length === 3
+        ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+        : 0;
+
+    if (seconds > 0 && (seconds < 45 || seconds > 900)) return false;
+    if (seconds === 0) return false;
+  }
+
+  return true;
+}
+
 /**
  * Recursively extracts all videoRenderer nodes from ytInitialData tree without duplicate videoIds
  */
@@ -87,6 +115,7 @@ async function searchSingleInvidious(instance: string, query: string): Promise<Y
   const results: YouTubeSearchResult[] = items
     .map((item: any) => {
       if (item.type === 'video' && item.videoId) {
+        if (item.liveNow === true) return null; // Added live stream check
         const seconds = item.lengthSeconds || 0;
         const m = Math.floor(seconds / 60);
         const s = Math.floor(seconds % 60);
@@ -299,7 +328,7 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeSearc
   try {
     const proxyResults = await searchYouTubeViaApiProxies(query);
     if (proxyResults && proxyResults.length > 0) {
-      return proxyResults;
+      return proxyResults.filter(isLikelySong);
     }
   } catch (err: any) {
     console.error("[YouTubeSearch] searchYouTubeViaApiProxies failed, falling back to scraper:", err.message || err);
@@ -372,11 +401,11 @@ export async function searchYouTubeOnServer(query: string): Promise<YouTubeSearc
     }
 
     if (videos.length === 0) {
-      return await searchYouTubeViaApiProxies(query);
+      return (await searchYouTubeViaApiProxies(query)).filter(isLikelySong);
     }
-    return videos.slice(0, 20);
+    return videos.filter(isLikelySong).slice(0, 20);
   } catch (error: any) {
     console.error("[YouTubeSearch Server Error]", error.message || error);
-    return await searchYouTubeViaApiProxies(query);
+    return (await searchYouTubeViaApiProxies(query)).filter(isLikelySong);
   }
 }

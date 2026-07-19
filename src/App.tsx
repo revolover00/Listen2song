@@ -71,16 +71,15 @@ export default function App() {
   const ytPlayerRef = useRef<ReactPlayer>(null);
 
   // Sync ReactPlayer seek
-  useEffect(() => {
-    if (player.currentTrack?.source === 'youtube' && ytPlayerRef.current) {
-      // We only seek if the difference is large enough to suggest a manual seek
-      const internalTime = player.currentTime;
-      const playerTime = ytPlayerRef.current.getCurrentTime();
-      if (Math.abs(internalTime - playerTime) > 2) {
-        ytPlayerRef.current.seekTo(internalTime, 'seconds');
-      }
+  const onSeek = (time: number) => {
+    const isYt = player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-');
+    if (isYt && ytPlayerRef.current) {
+      ytPlayerRef.current.seekTo(time, 'seconds');
     }
-  }, [player.currentTime]);
+    player.seekTo(time);
+  };
+
+  // ... (rest of App)
 
   const { accentColor, accentColorLight, accentColorBlob } = useAverageColor(
     player.currentTrack?.coverUrl || null,
@@ -324,7 +323,7 @@ export default function App() {
                 onPlayPauseToggle={player.togglePlay}
                 onNext={player.next}
                 onPrev={player.prev}
-                onSeek={player.seekTo}
+                onSeek={onSeek}
                 onVolumeChange={player.setVolume}
                 onMuteToggle={player.toggleMute}
                 onShuffleToggle={player.toggleShuffle}

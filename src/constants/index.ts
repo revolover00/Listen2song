@@ -8,5 +8,6 @@ export const STORAGE_KEYS = {
   VOLUME: 'palestra_volume',
   PLAYBACK_POSITION: 'palestra_playback_position',
   REPEAT_MODE: 'palestra_repeat_mode',
-  SHUFFLE_MODE: 'palestra_shuffle_mode'
+  SHUFFLE_MODE: 'palestra_shuffle_mode',
+  PLAY_HISTORY: 'listen2song_play_history'
 };
