@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Track, YTMusicSong, YTMusicAlbum, YTMusicArtist, YTMusicSearchResults } from '../../types';
+import React, { useState } from 'react';
+import { Track } from '../../types';
 import { 
   Youtube, 
   Search, 
@@ -18,13 +18,7 @@ import {
   Trash2,
   Layers,
   ArrowLeft,
-  Bookmark,
-  Disc,
-  Mic2,
-  History,
-  TrendingUp,
-  ArrowRight,
-  Star
+  Bookmark
 } from 'lucide-react';
 
 interface YouTubeSearchViewProps {
@@ -37,15 +31,24 @@ interface YouTubeSearchViewProps {
   onToggleSave: (trackId: string, isSaved: boolean) => void;
 }
 
-type SearchTab = 'all' | 'songs' | 'albums' | 'artists';
-type ViewMode = 'search' | 'album' | 'artist';
+interface SearchResult {
+  videoId?: string;
+  playlistId?: string;
+  title: string;
+  channelName: string;
+  thumbnail: string;
+  duration?: string;
+  videoCount?: number;
+  desc?: string;
+  isPlaylist?: boolean;
+}
 
 interface PlaylistData {
   playlistId: string;
   title: string;
   author: string;
   videoCount: number;
-  tracks: YTMusicSong[];
+  tracks: SearchResult[];
 }
 
 interface PlaylistResult {
@@ -58,6 +61,219 @@ interface PlaylistResult {
   isPlaylist: true;
 }
 
+// 100% Reliable Client-Side Direct Search racing both CORS-friendly Piped and Invidious instances
+async function searchYouTubeDirectClientSide(query: string): Promise<SearchResult[]> {
+  const invidiousInstances = [
+    "yewtu.be",
+    "invidious.flokinet.to",
+    "iv.melmac.space",
+    "invidious.projectsegfaut.im",
+    "invidious.perennialte.ch",
+    "invidious.nerdvpn.de",
+    "invidio.xamh.de",
+    "iv.ggtyler.dev",
+    "invidious.lunar.icu",
+    "invidious.no-logs.com",
+    "inv.tux.im"
+  ];
+
+  const pipedInstances = [
+    "pipedapi.kavin.rocks",
+    "pipedapi.tokhmi.xyz",
+    "api.piped.yt",
+    "piped-api.lule.io",
+    "pipedapi.adminforge.de",
+    "pipedapi.astphy.com",
+    "pipedapi.swg.rocks",
+    "pipedapi.colby.school",
+    "pipedapi.us.to",
+    "pipedapi.r4fo.com"
+  ];
+
+  const totalCount = invidiousInstances.length + pipedInstances.length;
+  console.log(`[YouTubeSearchView] Running ultra-fast direct search race across ${totalCount} public endpoints...`);
+
+  return new Promise<SearchResult[]>((resolve) => {
+    let resolved = false;
+    let finishedCount = 0;
+    const controllers: AbortController[] = [];
+
+    // Safety timeout of 4.5 seconds to ensure fast UI response under any network status
+    const safetyTimeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        controllers.forEach(c => {
+          try { c.abort(); } catch (e) {}
+        });
+        console.warn("[YouTubeSearchView] Client-side search race timed out.");
+        resolve([]);
+      }
+    }, 4500);
+
+    const handleSuccess = (results: SearchResult[], instance: string, type: 'Piped' | 'Invidious') => {
+      if (results.length > 0 && !resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        controllers.forEach(c => {
+          try { c.abort(); } catch (e) {}
+        });
+        console.log(`[YouTubeSearchView] Client direct search race WON by [${type}: ${instance}] with ${results.length} results!`);
+        resolve(results);
+      }
+    };
+
+    const handleFailure = () => {
+      finishedCount++;
+      if (finishedCount === totalCount && !resolved) {
+        resolved = true;
+        clearTimeout(safetyTimeout);
+        resolve([]);
+      }
+    };
+
+    // Helper to extract video ID
+    const parseVideoId = (item: any): string | null => {
+      if (item.videoId && item.videoId.length === 11) return item.videoId;
+      if (item.id && item.id.length === 11) return item.id;
+      if (item.url) {
+        const match = item.url.match(/[?&]v=([^&#]+)/) || item.url.match(/watch\?v=([^&#]+)/);
+        if (match && match[1]) {
+          return match[1].slice(0, 11);
+        }
+        const parts = item.url.split('/');
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.length === 11) {
+          return lastPart;
+        }
+      }
+      return null;
+    };
+
+    // 1. Launch Invidious instances
+    invidiousInstances.forEach((instance) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+
+      fetch(`https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=all`, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+      .then(async (res) => {
+        if (!res.ok) throw new Error();
+        const items = await res.json();
+        if (Array.isArray(items) && items.length > 0) {
+          const results: SearchResult[] = items
+            .map((item: any) => {
+              if (item.type === 'video' && parseVideoId(item)) {
+                const videoId = parseVideoId(item) || "";
+                const seconds = item.lengthSeconds || 0;
+                const m = Math.floor(seconds / 60);
+                const s = Math.floor(seconds % 60);
+                const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+                return {
+                  videoId,
+                  title: item.title || "Unknown Track",
+                  channelName: item.author || "Unknown Artist",
+                  thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+                  duration
+                };
+              } else if (item.type === 'playlist' && item.playlistId) {
+                return {
+                  playlistId: item.playlistId,
+                  title: item.title || "Unknown Playlist",
+                  channelName: item.author || "YouTube Playlist",
+                  thumbnail: item.playlistThumbnail || `https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80`,
+                  videoCount: item.videoCount || 0,
+                  desc: `Playlist by ${item.author || 'Creator'}`,
+                  isPlaylist: true
+                };
+              }
+              return null;
+            })
+            .filter((item) => item !== null) as SearchResult[];
+
+          if (results.length > 0) {
+            handleSuccess(results, instance, 'Invidious');
+          } else {
+            throw new Error();
+          }
+        } else {
+          throw new Error();
+        }
+      })
+      .catch(() => {
+        handleFailure();
+      });
+    });
+
+    // 2. Launch Piped instances (which specifically support client-side CORS)
+    pipedInstances.forEach((instance) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+
+      fetch(`https://${instance}/search?q=${encodeURIComponent(query)}&filter=all`, {
+        signal: controller.signal
+      })
+      .then(async (res) => {
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const items = data.items;
+        if (Array.isArray(items) && items.length > 0) {
+          const results: SearchResult[] = items
+            .map((item: any) => {
+              if ((item.type === 'stream' || item.type === 'video') && parseVideoId(item)) {
+                const videoId = parseVideoId(item) || "";
+                const seconds = item.duration || 0;
+                const m = Math.floor(seconds / 60);
+                const s = Math.floor(seconds % 60);
+                const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
+                return {
+                  videoId,
+                  title: item.title || "Unknown Track",
+                  channelName: item.uploaderName || item.channelName || "Unknown Artist",
+                  thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+                  duration
+                };
+              } else if (item.type === 'playlist') {
+                let playlistId = item.playlistId;
+                if (!playlistId && item.url) {
+                  const match = item.url.match(/[?&]list=([^&#]+)/);
+                  playlistId = match ? match[1] : item.url.split('/').pop();
+                }
+                if (playlistId) {
+                  return {
+                    playlistId,
+                    title: item.title || item.name || "Unknown Playlist",
+                    channelName: item.uploaderName || "YouTube Playlist",
+                    thumbnail: item.thumbnail || `https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80`,
+                    videoCount: item.videos || item.videoCount || 0,
+                    desc: `Playlist by ${item.uploaderName || 'Creator'}`,
+                    isPlaylist: true
+                  };
+                }
+              }
+              return null;
+            })
+            .filter((item) => item !== null) as SearchResult[];
+
+          if (results.length > 0) {
+            handleSuccess(results, instance, 'Piped');
+          } else {
+            throw new Error();
+          }
+        } else {
+          throw new Error();
+        }
+      })
+      .catch(() => {
+        handleFailure();
+      });
+    });
+  });
+}
+
 export function YouTubeSearchView({
   onSelectTrack,
   currentTrackId,
@@ -67,20 +283,11 @@ export function YouTubeSearchView({
   onToggleSave
 }: YouTubeSearchViewProps) {
   const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<SearchTab>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('search');
-  const [results, setResults] = useState<YTMusicSearchResults | null>(null);
-  const [suggestions, setSuggestions] = useState<YTMusicSong[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  
-  // Detail Views State
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailData, setDetailData] = useState<any>(null);
-  
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleToggleSaveTrack = (trackId: string, title: string, artist: string, thumbnail: string, videoId: string) => {
     const existingTrack = tracks.find(t => t.id === trackId);
@@ -88,9 +295,9 @@ export function YouTubeSearchView({
       const newSavedState = !existingTrack.isSaved;
       onToggleSave(trackId, newSavedState);
       if (newSavedState) {
-        addToast(`Saved "${title}" to sidebar list!`, 'success');
+        addToast(`Saved "${title}" to your list!`, 'success');
       } else {
-        addToast(`Removed "${title}" from sidebar list.`, 'info');
+        addToast(`Removed "${title}" from your list.`, 'info');
       }
     } else {
       const newTrack: Track = {
@@ -107,7 +314,7 @@ export function YouTubeSearchView({
       };
       addTrack(newTrack);
       onToggleSave(trackId, true);
-      addToast(`Saved "${title}" to sidebar list!`, 'success');
+      addToast(`Saved "${title}" to your list!`, 'success');
     }
   };
 
@@ -146,66 +353,6 @@ export function YouTubeSearchView({
     }
   ];
 
-  const handleDownload = async (e: React.MouseEvent, item: YTMusicSong) => {
-    e.stopPropagation();
-    const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
-    setDownloadingId(item.videoId);
-    addToast(`Preparing download for "${item.title}"`, 'info');
-
-    try {
-      const response = await fetch('/api/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          videoUrl,
-          songTitle: item.title
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Download failed');
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await response.json();
-        if (json.success && json.redirectUrl) {
-          const a = document.createElement('a');
-          a.href = json.redirectUrl;
-          a.download = `${item.title || 'audio'}.mp3`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          addToast(`✅ Downloaded "${item.title}" successfully!`, 'success');
-          return;
-        } else if (json.error) {
-          throw new Error(json.error);
-        }
-      }
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${item.title || 'audio'}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-
-      addToast(`✅ Downloaded "${item.title}" successfully!`, 'success');
-    } catch (error: any) {
-      console.error(error);
-      const errorMsg = error.message ? `: ${error.message}` : '';
-      addToast(`❌ Download failed. Please try again${errorMsg}`, 'error');
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
-  // Quick exploration category tags for broad "free-search"
   const quickTags = [
     { label: '🔥 Today\'s Hits', query: 'Popular hit songs 2026 Billboard' },
     { label: '🕺 Dance & EDM', query: 'EDM festival music mix' },
@@ -215,123 +362,49 @@ export function YouTubeSearchView({
     { label: '✨ Acoustic Covers', query: 'Acoustic covers playlist' }
   ];
 
-  const handleSearch = useCallback(async (searchQuery: string, tab: SearchTab) => {
-    if (!searchQuery.trim()) {
-      setResults(null);
-      setHasSearched(false);
-      return;
-    }
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-
-    setLoading(true);
-    setHasSearched(true);
-    setViewMode('search');
-
-    try {
-      const response = await fetch(`/api/ytmusic/search?q=${encodeURIComponent(searchQuery)}&filter=${tab === 'all' ? '' : tab.slice(0, -1)}`, {
-        signal: abortController.signal
-      });
-
-      if (!response.ok) throw new Error('Search failed');
-      const data = await response.json();
-      
-      if (data.success) {
-        setResults(data.results);
-      }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.error('Search error:', err);
-        addToast('Search failed. Please try again.', 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [addToast]);
-
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    if (query.trim()) {
-      searchTimeoutRef.current = setTimeout(() => {
-        handleSearch(query, activeTab);
-      }, 400);
-    } else {
-      setResults(null);
-      setHasSearched(false);
-    }
-
-    return () => {
-      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    };
-  }, [query, activeTab, handleSearch]);
-
-  const fetchAlbumDetail = async (albumId: string) => {
-    setDetailLoading(true);
-    setViewMode('album');
-    setDetailData(null);
-    try {
-      const res = await fetch(`/api/ytmusic/album/${albumId}`);
-      const data = await res.json();
-      if (data.success) {
-        setDetailData(data.album);
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      console.error('Fetch album error:', err);
-      addToast('Failed to load album details.', 'error');
-      setViewMode('search');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const fetchArtistDetail = async (artistId: string) => {
-    setDetailLoading(true);
-    setViewMode('artist');
-    setDetailData(null);
-    try {
-      const res = await fetch(`/api/ytmusic/artist/${artistId}`);
-      const data = await res.json();
-      if (data.success) {
-        setDetailData(data.artist);
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      console.error('Fetch artist error:', err);
-      addToast('Failed to load artist details.', 'error');
-      setViewMode('search');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
   // Load trending suggestions on mount
-  useEffect(() => {
+  React.useEffect(() => {
+    let active = true;
     const fetchInitialSuggestions = async () => {
+      setLoadingSuggestions(true);
       try {
-        const response = await fetch('/api/ytmusic/search?q=trending%20songs&filter=song');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.results.songs) {
-            setSuggestions(data.results.songs);
+        const defaultQueries = ["Popular hit songs 2026", "Billboard Hot 100 songs", "Viral acoustic hits current"];
+        const randomQuery = defaultQueries[Math.floor(Math.random() * defaultQueries.length)];
+        
+        let searchResults: SearchResult[] = [];
+        
+        try {
+          const direct = await searchYouTubeDirectClientSide(randomQuery);
+          if (direct && direct.length > 0) {
+            searchResults = direct;
           }
+        } catch (e) {
+          console.warn("[YouTubeView] Direct client suggestions failed, falling back:", e);
+        }
+
+        if (searchResults.length === 0) {
+          const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(randomQuery)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && Array.isArray(data.results)) {
+              searchResults = data.results;
+            }
+          }
+        }
+
+        if (active && searchResults.length > 0) {
+          setSuggestions(searchResults);
+          setResults(searchResults);
         }
       } catch (err) {
         console.warn("Could not load initial suggestions:", err);
+      } finally {
+        if (active) setLoadingSuggestions(false);
       }
     };
 
     fetchInitialSuggestions();
+    return () => { active = false; };
   }, []);
 
   // Extract YouTube Playlist ID
@@ -366,13 +439,11 @@ export function YouTubeSearchView({
           author: p.author || "Unknown Creator",
           videoCount: p.videoCount || p.tracks.length,
           tracks: p.tracks.map((t: any) => ({
-            type: 'song',
             videoId: t.videoId,
             title: t.title,
-            artist: t.channelName,
+            channelName: t.channelName,
             thumbnail: t.thumbnail,
-            duration: t.duration,
-            isExplicit: false
+            duration: t.duration
           }))
         });
         addToast(`Successfully loaded playlist "${p.title}"`, "success");
@@ -387,39 +458,88 @@ export function YouTubeSearchView({
     }
   };
 
-  const handlePlayResult = async (item: YTMusicSong) => {
+  const handleSearch = async (e?: React.FormEvent, customQuery?: string) => {
+    if (e) e.preventDefault();
+    const activeQuery = customQuery || query;
+    if (!activeQuery.trim()) return;
+
+    // Check if the query is actually a Playlist URL or ID
+    const playlistId = extractPlaylistId(activeQuery);
+    if (playlistId) {
+      handleLoadPlaylist(playlistId);
+      return;
+    }
+
+    setLoading(true);
+    setHasSearched(true);
+    setResults([]);
+
+    try {
+      let searchResults: SearchResult[] = [];
+      
+      try {
+        const direct = await searchYouTubeDirectClientSide(activeQuery);
+        if (direct && direct.length > 0) {
+          searchResults = direct;
+        }
+      } catch (e) {
+        console.warn("[YouTubeView] Direct client search failed, falling back:", e);
+      }
+      
+      if (searchResults.length === 0) {
+        const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(activeQuery)}`);
+        if (!res.ok) {
+          throw new Error('Server-side search failed');
+        }
+        const data = await res.json();
+        if (data.success && Array.isArray(data.results)) {
+          searchResults = data.results;
+        }
+      }
+
+      setResults(searchResults);
+      if (searchResults.length === 0) {
+        addToast("No tracks found for this search. Try other keywords.", "info");
+      }
+    } catch (err: any) {
+      console.error("YouTube search execution failed:", err);
+      addToast("Failed to fetch YouTube search results. Please try again.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePlayResult = async (item: SearchResult) => {
     const trackId = `youtube-${item.videoId}`;
     const newTrack: Track = {
       id: trackId,
       title: item.title,
-      artist: item.artist,
-      album: item.album || 'YouTube Music',
+      artist: item.channelName,
+      album: 'YouTube Stream',
       audioUrl: item.videoId,
-      coverUrl: item.thumbnail,
+      coverUrl: item.thumbnail || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17',
       lyrics: '',
       source: 'youtube',
-      youtubeId: item.videoId,
-      isExplicit: item.isExplicit
+      youtubeId: item.videoId
     };
 
     addTrack(newTrack);
     onSelectTrack(trackId);
-    addToast(`Playing "${item.title}"!`, 'success');
+    addToast(`Playing "${item.title}" from YouTube!`, 'success');
   };
 
-  const handleAddToQueue = (item: YTMusicSong) => {
+  const handleAddToQueue = (item: SearchResult) => {
     const trackId = `youtube-${item.videoId}`;
     const newTrack: Track = {
       id: trackId,
       title: item.title,
-      artist: item.artist,
-      album: item.album || 'YouTube Music',
+      artist: item.channelName,
+      album: 'YouTube Stream',
       audioUrl: item.videoId,
-      coverUrl: item.thumbnail,
+      coverUrl: item.thumbnail || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17',
       lyrics: '',
       source: 'youtube',
-      youtubeId: item.videoId,
-      isExplicit: item.isExplicit
+      youtubeId: item.videoId
     };
 
     addTrack(newTrack);
@@ -437,7 +557,7 @@ export function YouTubeSearchView({
       const newTrack: Track = {
         id: trackId,
         title: item.title,
-        artist: item.artist,
+        artist: item.channelName,
         album: playlistData.title,
         audioUrl: item.videoId,
         coverUrl: item.thumbnail || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17',
@@ -463,7 +583,7 @@ export function YouTubeSearchView({
       const newTrack: Track = {
         id: trackId,
         title: item.title,
-        artist: item.artist,
+        artist: item.channelName,
         album: playlistData.title,
         audioUrl: item.videoId,
         coverUrl: item.thumbnail || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17',
@@ -607,7 +727,7 @@ export function YouTubeSearchView({
                             {track.title}
                           </p>
                           <p className="text-[10px] text-white/40 truncate mt-0.5">
-                            {track.artist}
+                            {track.channelName}
                           </p>
                         </div>
                       </div>
@@ -636,7 +756,7 @@ export function YouTubeSearchView({
                               handleToggleSaveTrack(
                                 `youtube-${track.videoId}`,
                                 track.title,
-                                track.artist,
+                                track.channelName,
                                 track.thumbnail,
                                 track.videoId || ""
                               );
@@ -646,17 +766,9 @@ export function YouTubeSearchView({
                                 ? 'text-brand-purple bg-brand-purple/10 border-brand-purple/20'
                                 : 'text-white/40 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
                             }`}
-                            title={tracks.some(t => t.id === `youtube-${track.videoId}` && t.isSaved) ? "Remove from sidebar" : "Save to sidebar"}
+                            title={tracks.some(t => t.id === `youtube-${track.videoId}` && t.isSaved) ? "Remove from list" : "Save to list"}
                           >
                             <Bookmark className={`h-3 w-3 ${tracks.some(t => t.id === `youtube-${track.videoId}` && t.isSaved) ? 'fill-current' : ''}`} />
-                          </button>
-
-                          <button
-                            onClick={(e) => handleDownload(e, track)}
-                            className="p-1 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg transition-all border border-white/5 cursor-pointer"
-                            title="Download MP3"
-                          >
-                            <Download className="h-3 w-3" />
                           </button>
                         </div>
                       </div>
@@ -684,7 +796,7 @@ export function YouTubeSearchView({
                 type="button"
                 onClick={() => {
                   setQuery(tag.query);
-                  handleSearch(tag.query, activeTab);
+                  handleSearch(undefined, tag.query);
                 }}
                 className="shrink-0 text-[10px] md:text-[11px] font-medium px-3 py-1.5 bg-white/5 hover:bg-brand-purple/20 hover:text-white rounded-full border border-white/5 hover:border-brand-purple/40 transition-all duration-300 cursor-pointer text-white/70"
               >
@@ -694,18 +806,7 @@ export function YouTubeSearchView({
           </div>
 
           {/* Combined Smart Search & Playlist URL Input */}
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              const pId = extractPlaylistId(query);
-              if (pId) {
-                handleLoadPlaylist(pId);
-              } else {
-                handleSearch(query, activeTab);
-              }
-            }} 
-            className="relative mb-5 flex-shrink-0 flex items-center gap-2"
-          >
+          <form onSubmit={handleSearch} className="relative mb-5 flex-shrink-0 flex items-center gap-2">
             <div className="relative flex-1">
               <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-white/40">
                 <Search className="h-4 w-4" />
@@ -714,7 +815,7 @@ export function YouTubeSearchView({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search songs, albums, artists OR paste YouTube Playlist URL..."
+                placeholder="Search songs, artists OR paste YouTube Playlist URL here..."
                 className="w-full bg-white/5 hover:bg-white/10 focus:bg-white/10 text-white placeholder-white/30 text-xs md:text-sm pl-11 pr-11 py-3 rounded-2xl border border-white/5 focus:border-brand-purple/40 focus:outline-none focus:ring-1 focus:ring-brand-purple/40 transition-all font-medium"
               />
               {query && (
@@ -733,7 +834,7 @@ export function YouTubeSearchView({
               disabled={loading || !query.trim()}
               className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs md:text-sm px-5 py-3 rounded-2xl flex items-center gap-2 font-bold cursor-pointer transition-all duration-300 disabled:opacity-50 shadow-lg shrink-0"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              <Search className="h-4 w-4" />
               <span>Search</span>
             </button>
             
@@ -749,231 +850,265 @@ export function YouTubeSearchView({
             )}
           </form>
 
-          {/* Search Tabs */}
-          {hasSearched && (
-            <div className="flex items-center gap-1 mb-4 flex-shrink-0">
-              {(['all', 'songs', 'albums', 'artists'] as SearchTab[]).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-4 py-1.5 rounded-full text-[10px] md:text-xs font-bold transition-all uppercase tracking-wider ${
-                    activeTab === tab 
-                      ? 'bg-brand-purple text-white shadow-lg shadow-brand-purple/20' 
-                      : 'bg-white/5 text-white/40 hover:text-white/60'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Grid View Container */}
-          <div className="flex-1 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          <div className="flex-1 overflow-y-auto pr-1">
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 text-center text-white/40">
                 <Loader2 className="h-8 w-8 animate-spin text-brand-purple mb-4" />
-                <p className="text-xs font-bold font-display uppercase tracking-widest text-brand-purple animate-pulse">Searching YouTube Music...</p>
-                <p className="text-[10px] text-white/25 mt-1">Fetching metadata, songs, albums and artists</p>
+                <p className="text-xs font-bold font-display uppercase tracking-widest text-brand-purple animate-pulse">Searching YouTube stream database...</p>
+                <p className="text-[10px] text-white/25 mt-1">Racing multiple serverless proxy endpoints across the globe</p>
               </div>
-            ) : viewMode === 'album' && detailData ? (
-              <div className="animate-fadeIn">
-                <button 
-                  onClick={() => setViewMode('search')}
-                  className="mb-4 flex items-center gap-2 text-xs font-bold text-white/60 hover:text-white transition-colors"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to search
-                </button>
-                <div className="flex flex-col md:flex-row gap-6 mb-8">
-                  <img src={detailData.thumbnail} className="w-48 h-48 rounded-2xl shadow-2xl" alt="" />
-                  <div className="flex flex-col justify-end">
-                    <p className="text-xs font-bold text-brand-purple uppercase tracking-widest mb-1">Album</p>
-                    <h2 className="text-2xl md:text-4xl font-black text-white mb-2 leading-tight">{detailData.title}</h2>
-                    <p className="text-sm text-white/60 font-medium">{detailData.artist} • {detailData.year}</p>
+            ) : results.length > 0 ? (
+              <>
+                <div className="flex items-center justify-between mb-4 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${hasSearched ? 'bg-brand-purple' : 'bg-red-500 animate-pulse'}`} />
+                    <h3 className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-white/50">
+                      {hasSearched 
+                        ? `Search Results (${results.length})` 
+                        : `⚡ Recommended Streams & Playlists`
+                      }
+                    </h3>
                   </div>
                 </div>
-                <div className="space-y-1">
-                  {detailData.songs?.map((song: YTMusicSong, i: number) => (
-                    <div 
-                      key={song.videoId} 
-                      onClick={() => handlePlayResult(song)}
-                      className="group flex items-center gap-4 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer"
+
+                {/* SQUARED CARDS RESPONSIVE GRID (Contains both playlist and video cards inline) */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-6">
+                  
+                  {/* INLINE CURATED PLAYLIST CARDS (Shown side-by-side with recommended videos) */}
+                  {!hasSearched && suggestedPlaylists.map((playlist) => (
+                    <div
+                      key={playlist.playlistId}
+                      onClick={() => handleLoadPlaylist(playlist.playlistId)}
+                      className="group relative rounded-2xl overflow-hidden bg-brand-purple/5 hover:bg-brand-purple/15 border border-brand-purple/20 hover:border-brand-purple/40 transition-all duration-300 cursor-pointer flex flex-col shadow-md shadow-brand-purple/5"
                     >
-                      <span className="w-4 text-xs font-mono text-white/20 text-center group-hover:text-brand-purple">{i+1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{song.title}</p>
-                        <p className="text-[10px] text-white/40 truncate">{song.artist}</p>
+                      {/* Image header with high opacity overlay */}
+                      <div className="aspect-[16/10] w-full overflow-hidden relative bg-black/30">
+                        <img
+                          src={playlist.thumbnail}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+                        />
+
+                        {/* Hover Overlay with ListMusic icon */}
+                        <div className="absolute inset-0 bg-brand-purple/75 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                          <span className="w-10 h-10 rounded-full bg-white text-brand-purple flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                            <ListMusic className="h-5 w-5" />
+                          </span>
+                        </div>
+
+                        {/* Distinct badge stating Playlist */}
+                        <div className="absolute top-2 left-2 bg-brand-purple text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg flex items-center gap-1 border border-brand-purple/35 shadow-sm">
+                          <ListMusic className="h-3 w-3 shrink-0" />
+                          <span>Playlist</span>
+                        </div>
+
+                        {/* Tracks count indicator bottom-right */}
+                        <span className="absolute bottom-2 right-2 bg-black/75 px-1.5 py-0.5 rounded-lg text-[9px] font-mono tracking-tighter text-white font-medium border border-white/5">
+                          {playlist.videoCount} Tracks
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono text-white/20">{song.duration}</span>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleAddToQueue(song); }}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-brand-purple text-white opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
+
+                        {/* Content details */}
+                        <div className="p-3 flex-1 flex flex-col justify-between">
+                          <div>
+                            <p className="text-xs font-bold line-clamp-2 leading-snug tracking-tight text-white group-hover:text-brand-purple-light transition-colors text-left" title={playlist.title}>
+                              {playlist.title}
+                            </p>
+                            <p className="text-[10px] text-white/45 truncate mt-1 text-left flex items-center gap-1">
+                              <CheckCircle2 className="text-brand-purple h-3 w-3 shrink-0" />
+                              <span>{playlist.channelName}</span>
+                            </p>
+                          </div>
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-white/5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLoadPlaylist(playlist.playlistId);
+                              }}
+                              className="flex-1 py-1.5 px-2 rounded-xl text-[10px] font-bold bg-brand-purple/20 hover:bg-brand-purple text-white border border-brand-purple/30 transition-all cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <ListMusic className="h-3.5 w-3.5" />
+                              <span>View Tracks</span>
+                            </button>
+                          </div>
+                        </div>
                     </div>
                   ))}
-                </div>
-              </div>
-            ) : viewMode === 'artist' && detailData ? (
-              <div className="animate-fadeIn">
-                <button 
-                  onClick={() => setViewMode('search')}
-                  className="mb-4 flex items-center gap-2 text-xs font-bold text-white/60 hover:text-white transition-colors"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  Back to search
-                </button>
-                <div className="flex items-center gap-6 mb-8">
-                  <img src={detailData.thumbnail} className="w-32 h-32 md:w-48 md:h-48 rounded-full shadow-2xl border-4 border-white/5" alt="" />
-                  <div>
-                    <h2 className="text-3xl md:text-5xl font-black text-white mb-2">{detailData.name}</h2>
-                    <p className="text-xs font-bold text-brand-purple uppercase tracking-widest">Verified Artist</p>
-                  </div>
-                </div>
-                
-                {detailData.songs && detailData.songs.length > 0 && (
-                  <div className="mb-8">
-                    <h3 className="text-sm font-bold text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Sparkles className="h-3 w-3" /> Popular Songs
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {detailData.songs.map((song: YTMusicSong) => (
-                        <div key={song.videoId} onClick={() => handlePlayResult(song)} className="group flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors cursor-pointer border border-transparent hover:border-white/5">
-                          <img src={song.thumbnail} className="w-10 h-10 rounded-lg" alt="" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-white truncate">{song.title}</p>
-                            <p className="text-[10px] text-white/40">{song.duration}</p>
-                          </div>
-                          <button onClick={(e) => { e.stopPropagation(); handleAddToQueue(song); }} className="p-1.5 rounded-lg bg-white/5 hover:bg-brand-purple text-white opacity-0 group-hover:opacity-100 transition-all">
-                            <Plus className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : results ? (
-              <div className="space-y-8 pb-10">
-                {/* SONGS SECTION */}
-                {(activeTab === 'all' || activeTab === 'songs') && results.songs && results.songs.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest flex items-center gap-2">
-                        <Music className="h-3 w-3 text-brand-purple" /> Songs
-                      </h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-2">
-                      {results.songs.map((song) => {
-                        const isActive = currentTrackId === `youtube-${song.videoId}`;
-                        return (
-                          <div
-                            key={song.videoId}
-                            onClick={() => handlePlayResult(song)}
-                            className={`group flex items-center gap-3 p-2 rounded-xl border transition-all cursor-pointer ${
-                              isActive 
-                                ? 'bg-brand-purple/15 border-brand-purple/30' 
-                                : 'bg-white/[0.02] border-white/5 hover:bg-white/[0.06] hover:border-white/15'
-                            }`}
-                          >
-                            <div className="relative shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-black/40 border border-white/5">
-                              <img src={song.thumbnail} alt="" className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <Play className="h-4 w-4 text-white fill-current" />
-                              </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-xs font-bold truncate ${isActive ? 'text-brand-purple' : 'text-white'}`}>{song.title}</p>
-                              <p className="text-[10px] text-white/40 truncate mt-0.5">{song.artist}</p>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-mono text-white/20 hidden sm:block">{song.duration}</span>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleAddToQueue(song); }}
-                                  className="p-1.5 text-white/40 hover:text-white bg-white/5 hover:bg-white/10 rounded-lg border border-white/5"
-                                  title="Add to queue"
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleSaveTrack(`youtube-${song.videoId}`, song.title, song.artist, song.thumbnail, song.videoId);
-                                  }}
-                                  className={`p-1.5 rounded-lg border ${
-                                    tracks.some(t => t.id === `youtube-${song.videoId}` && t.isSaved)
-                                      ? 'text-brand-purple border-brand-purple/20'
-                                      : 'text-white/40 border-white/5'
-                                  }`}
-                                >
-                                  <Bookmark className={`h-3 w-3 ${tracks.some(t => t.id === `youtube-${song.videoId}` && t.isSaved) ? 'fill-current' : ''}`} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
 
-                {/* ALBUMS SECTION */}
-                {(activeTab === 'all' || activeTab === 'albums') && results.albums && results.albums.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Disc className="h-3 w-3 text-brand-purple" /> Albums
-                    </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {results.albums.map((album) => (
+                  {/* REGULAR AND PLAYLIST RESULTS (MIXED INLINE) */}
+                  {results.map((item) => {
+                    if (item.isPlaylist) {
+                      const pId = item.playlistId || "";
+                      return (
                         <div
-                          key={album.albumId}
-                          onClick={() => fetchAlbumDetail(album.albumId)}
-                          className="group bg-white/[0.02] hover:bg-white/[0.06] border border-white/5 hover:border-white/15 p-3 rounded-2xl transition-all cursor-pointer"
+                          key={`playlist-${pId}`}
+                          onClick={() => handleLoadPlaylist(pId)}
+                          className="group relative rounded-2xl overflow-hidden bg-brand-purple/5 hover:bg-brand-purple/15 border border-brand-purple/20 hover:border-brand-purple/40 transition-all duration-300 cursor-pointer flex flex-col shadow-md shadow-brand-purple/5"
                         >
-                          <div className="aspect-square rounded-xl overflow-hidden mb-3 relative shadow-lg">
-                            <img src={album.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                            <div className="absolute inset-0 bg-brand-purple/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <ListMusic className="h-6 w-6 text-white" />
+                          {/* Image header with high opacity overlay */}
+                          <div className="aspect-[16/10] w-full overflow-hidden relative bg-black/30">
+                            <img
+                              src={item.thumbnail}
+                              alt=""
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+                            />
+
+                            {/* Hover Overlay with ListMusic icon */}
+                            <div className="absolute inset-0 bg-brand-purple/75 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                              <span className="w-10 h-10 rounded-full bg-white text-brand-purple flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                                <ListMusic className="h-5 w-5" />
+                              </span>
+                            </div>
+
+                            {/* Distinct badge stating Playlist */}
+                            <div className="absolute top-2 left-2 bg-brand-purple text-white text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg flex items-center gap-1 border border-brand-purple/35 shadow-sm">
+                              <ListMusic className="h-3 w-3 shrink-0" />
+                              <span>Playlist</span>
+                            </div>
+
+                            {/* Tracks count indicator bottom-right */}
+                            <span className="absolute bottom-2 right-2 bg-black/75 px-1.5 py-0.5 rounded-lg text-[9px] font-mono tracking-tighter text-white font-medium border border-white/5">
+                              {item.videoCount || 0} Tracks
+                            </span>
+                          </div>
+
+                          {/* Content details */}
+                          <div className="p-3 flex-1 flex flex-col justify-between">
+                            <div>
+                              <p className="text-xs font-bold line-clamp-2 leading-snug tracking-tight text-white group-hover:text-brand-purple-light transition-colors text-left" title={item.title}>
+                                {item.title}
+                              </p>
+                              <p className="text-[10px] text-white/45 truncate mt-1 text-left flex items-center gap-1">
+                                <CheckCircle2 className="text-brand-purple h-3 w-3 shrink-0" />
+                                <span>{item.channelName}</span>
+                              </p>
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-white/5">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleLoadPlaylist(pId);
+                                }}
+                                className="flex-1 py-1.5 px-2 rounded-xl text-[10px] font-bold bg-brand-purple/20 hover:bg-brand-purple text-white border border-brand-purple/30 transition-all cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <ListMusic className="h-3.5 w-3.5" />
+                                <span>View Tracks</span>
+                              </button>
                             </div>
                           </div>
-                          <p className="text-xs font-bold text-white truncate leading-tight">{album.title}</p>
-                          <p className="text-[10px] text-white/40 truncate mt-1">{album.artist} • {album.year}</p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      );
+                    }
 
-                {/* ARTISTS SECTION */}
-                {(activeTab === 'all' || activeTab === 'artists') && results.artists && results.artists.length > 0 && (
-                  <div>
-                    <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Mic2 className="h-3 w-3 text-brand-purple" /> Artists
-                    </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {results.artists.map((artist) => (
-                        <div
-                          key={artist.artistId}
-                          onClick={() => fetchArtistDetail(artist.artistId)}
-                          className="group flex flex-col items-center p-3 rounded-2xl hover:bg-white/5 transition-all cursor-pointer text-center"
-                        >
-                          <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden mb-3 shadow-2xl border-2 border-white/5 group-hover:border-brand-purple/40 transition-colors">
-                            <img src={artist.thumbnail} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    const isActive = currentTrackId === `youtube-${item.videoId}`;
+                    return (
+                      <div
+                        key={`video-${item.videoId}`}
+                        onClick={() => handlePlayResult(item)}
+                        className={`group relative rounded-2xl overflow-hidden bg-white/[0.02] hover:bg-white/[0.06] border transition-all duration-300 cursor-pointer flex flex-col ${
+                          isActive 
+                            ? 'border-brand-purple ring-1 ring-brand-purple/30 shadow-lg shadow-brand-purple-blob/10' 
+                            : 'border-white/5 hover:border-white/15'
+                        }`}
+                      >
+                        {/* Widescreen preview container */}
+                        <div className="aspect-[16/10] w-full overflow-hidden relative bg-black/30">
+                          <img
+                            src={item.thumbnail}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+                          />
+
+                          {/* Dark overlay with floating play button */}
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                            <span className="w-10 h-10 rounded-full bg-brand-purple text-white flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform duration-300">
+                              <Play className="h-5 w-5 fill-current ml-0.5" />
+                            </span>
                           </div>
-                          <p className="text-xs font-bold text-white truncate w-full">{artist.name}</p>
-                          <p className="text-[10px] text-white/40 mt-1 uppercase tracking-tighter">Artist</p>
+
+                          {/* Float Badge duration */}
+                          <span className="absolute bottom-2 right-2 bg-black/75 px-1.5 py-0.5 rounded-lg text-[9px] font-mono tracking-tighter text-white font-medium border border-white/5">
+                            {item.duration}
+                          </span>
+
+                          {/* Active state badge */}
+                          {isActive && (
+                            <div className="absolute top-2 left-2 bg-brand-purple px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest text-white flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                              <span>LIVE</span>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+
+                        {/* Title details & action items */}
+                        <div className="p-3 flex-1 flex flex-col justify-between">
+                          <div>
+                            <p 
+                              className={`text-xs font-bold line-clamp-2 leading-snug tracking-tight text-left transition-colors duration-300 ${
+                                isActive ? 'text-brand-purple' : 'text-white/90 group-hover:text-white'
+                              }`}
+                              title={item.title}
+                            >
+                              {item.title}
+                            </p>
+                            <p className="text-[10px] text-white/40 truncate flex items-center gap-1.5 mt-1.5 text-left">
+                              <CheckCircle2 className="text-brand-purple h-3 w-3 shrink-0" />
+                              <span>{item.channelName}</span>
+                            </p>
+                          </div>
+
+                          {/* Compact Action Controls */}
+                          <div className="flex items-center gap-1.5 mt-3 pt-2.5 border-t border-white/5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleSaveTrack(
+                                  `youtube-${item.videoId}`,
+                                  item.title,
+                                  item.channelName,
+                                  item.thumbnail,
+                                  item.videoId || ""
+                                );
+                              }}
+                              className={`flex-1 py-1.5 px-3 rounded-xl transition-all border cursor-pointer flex items-center justify-center gap-2 ${
+                                tracks.some(t => t.id === `youtube-${item.videoId}` && t.isSaved)
+                                  ? 'text-brand-purple bg-brand-purple/10 border-brand-purple/20'
+                                  : 'text-white/50 hover:text-white bg-white/5 hover:bg-white/10 border-white/5'
+                              }`}
+                              title={tracks.some(t => t.id === `youtube-${item.videoId}` && t.isSaved) ? "Remove from Library" : "Save to Library"}
+                            >
+                              <Bookmark className={`h-3.5 w-3.5 ${tracks.some(t => t.id === `youtube-${item.videoId}` && t.isSaved) ? 'fill-current' : ''}`} />
+                              <span className="text-[10px] font-bold">Save to Library</span>
+                            </button>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddToQueue(item);
+                              }}
+                              className="p-1.5 text-white/50 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-white/5 cursor-pointer flex items-center justify-center"
+                              title="Add to queue"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center text-white/30">
-                {loading ? (
+                {loadingSuggestions ? (
                   <div className="flex flex-col items-center justify-center">
                     <Loader2 className="h-8 w-8 animate-spin mb-3 text-brand-purple" />
                     <p className="text-xs">Loading initial suggestions...</p>

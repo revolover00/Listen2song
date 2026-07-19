@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import ReactPlayer from 'react-player';
 import { usePlaylist } from './hooks/usePlaylist';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useAverageColor } from './hooks/useAverageColor';
@@ -66,6 +67,20 @@ export default function App() {
 
 
   const player = useAudioPlayer(tracks, (msg) => addToast(msg, 'error'));
+
+  const ytPlayerRef = useRef<ReactPlayer>(null);
+
+  // Sync ReactPlayer seek
+  useEffect(() => {
+    if (player.currentTrack?.source === 'youtube' && ytPlayerRef.current) {
+      // We only seek if the difference is large enough to suggest a manual seek
+      const internalTime = player.currentTime;
+      const playerTime = ytPlayerRef.current.getCurrentTime();
+      if (Math.abs(internalTime - playerTime) > 2) {
+        ytPlayerRef.current.seekTo(internalTime, 'seconds');
+      }
+    }
+  }, [player.currentTime]);
 
   const { accentColor, accentColorLight, accentColorBlob } = useAverageColor(
     player.currentTrack?.coverUrl || null,
@@ -350,6 +365,30 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Hidden React Player for YouTube playback */}
+      <div className="pointer-events-none opacity-0 invisible absolute h-0 w-0 overflow-hidden">
+        {(player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-')) && (
+          <ReactPlayer
+            ref={ytPlayerRef}
+            url={`https://www.youtube.com/watch?v=${player.currentTrack.youtubeId || player.currentTrack.audioUrl}`}
+            playing={player.isPlaying}
+            volume={player.volume}
+            muted={player.isMuted}
+            onProgress={(progress) => {
+              // Only update if not seeking to avoid feedback loops
+              player.setCurrentTime(progress.playedSeconds);
+            }}
+            onDuration={(duration) => player.setDuration(duration)}
+            onEnded={player.handleTrackEnded}
+            config={{
+              youtube: {
+                playerVars: { autoplay: 1, controls: 0, showinfo: 0, rel: 0, modestbranding: 1 }
+              }
+            }}
+          />
+        )}
+      </div>
 
       {/* Floating high contrast toast overlay */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />

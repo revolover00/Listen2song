@@ -142,14 +142,16 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
     if (!audio) return;
 
     const isCurrentYt = currentTrack?.source === 'youtube' || currentTrack?.id?.startsWith('youtube-');
-    let targetSrc = '';
-
+    
+    // If it's YouTube, we don't set audio.src for HTMLAudioElement
+    // App.tsx will handle YouTube playback via ReactPlayer
     if (isCurrentYt) {
-      const vId = currentTrack?.youtubeId || currentTrack?.audioUrl || '';
-      targetSrc = vId ? `/api/audio-stream/${vId}` : '';
-    } else {
-      targetSrc = currentTrack?.audioUrl || '';
+      audio.pause();
+      audio.src = '';
+      return;
     }
+
+    const targetSrc = currentTrack?.audioUrl || '';
 
     if (targetSrc && audio.src !== (targetSrc.startsWith('/') ? window.location.origin + targetSrc : targetSrc)) {
       isInternalLoadingRef.current = true;
@@ -171,16 +173,12 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         isInternalLoadingRef.current = false;
       };
 
-      // Use a larger delay to ensure the browser has finished the previous request interruption
-      // and prevent "interrupted by a new load request" errors (standard professional practice)
+      // Use a small delay to ensure the browser has finished the previous request interruption
+      // and prevent "interrupted by a new load request" errors
       const timer = setTimeout(() => {
-        try {
-          audio.load();
-          playAudio();
-        } catch (loadErr) {
-          console.warn('Audio load error:', loadErr);
-        }
-      }, 150);
+        audio.load();
+        playAudio();
+      }, 50);
 
       return () => clearTimeout(timer);
     }
@@ -619,6 +617,9 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
     setVolume,
     toggleMute,
     toggleShuffle,
-    toggleRepeat
+    toggleRepeat,
+    setDuration,
+    setCurrentTime,
+    handleTrackEnded
   };
 }

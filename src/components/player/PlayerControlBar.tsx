@@ -11,8 +11,6 @@ import {
   Volume2, 
   Radio, 
   Youtube, 
-  Loader2, 
-  Download,
   Minimize2,
   Bookmark
 } from 'lucide-react';
@@ -62,78 +60,6 @@ export function PlayerControlBar({
   isCurrentTrackSaved,
   onToggleSaveCurrent
 }: PlayerControlBarProps) {
-
-  const [downloadProgress, setDownloadProgress] = React.useState<string | null>(null);
-
-  const downloadSong = async (track: Track) => {
-    if (!track) return;
-    const vId = track.youtubeId || track.audioUrl;
-    if (!vId) return;
-
-    const videoUrl = `https://www.youtube.com/watch?v=${vId}`;
-    setDownloadProgress('preparing');
-    if (onToast) {
-      onToast(`Connecting to downloader...`, 'info');
-    }
-
-    try {
-      const response = await fetch('/api/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          videoUrl,
-          songTitle: track.title
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to download');
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await response.json();
-        if (json.success && json.redirectUrl) {
-          const a = document.createElement('a');
-          a.href = json.redirectUrl;
-          a.download = `${track.title || 'audio'}.mp3`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          if (onToast) {
-            onToast(`✅ Downloaded "${track.title}" successfully!`, 'success');
-          }
-          return;
-        } else if (json.error) {
-          throw new Error(json.error);
-        }
-      }
-
-      setDownloadProgress('saving');
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${track.title || 'audio'}.mp3`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-
-      if (onToast) {
-        onToast(`✅ Downloaded "${track.title}" successfully!`, 'success');
-      }
-    } catch (error) {
-      console.error(error);
-      if (onToast) {
-        onToast(`❌ Download failed. Please try again.`, 'error');
-      }
-    } finally {
-      setDownloadProgress(null);
-    }
-  };
 
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return '0:00';
@@ -360,28 +286,6 @@ export function PlayerControlBar({
             >
               <Youtube className="h-4 w-4 text-red-500" />
             </a>
-
-            {/* Downloader Button with active spinner feedback */}
-            <button
-              onClick={() => downloadSong(currentTrack)}
-              disabled={downloadProgress !== null}
-              className={`cursor-pointer text-xs p-1.5 rounded-lg transition-all flex items-center justify-center ${
-                downloadProgress !== null
-                  ? 'text-brand-purple bg-brand-purple/10 cursor-not-allowed animate-pulse'
-                  : 'text-white/50 hover:text-white hover:bg-white/5'
-              }`}
-              title={
-                downloadProgress === 'preparing'
-                  ? 'Preparing download...'
-                  : downloadProgress === 'saving'
-                  ? 'Saving MP3...'
-                  : 'Download song as MP3'
-              }
-            >
-              {downloadProgress === 'preparing' && <Loader2 className="h-4 w-4 animate-spin text-brand-purple" />}
-              {downloadProgress === 'saving' && <Loader2 className="h-4 w-4 animate-spin text-brand-purple" />}
-              {downloadProgress === null && <Download className="h-4 w-4" />}
-            </button>
           </div>
         )}
       </div>

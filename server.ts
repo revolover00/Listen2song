@@ -4,9 +4,7 @@ import { createServer as createViteServer } from "vite";
 import dns from "dns";
 import { generateLrcFromAudio, generateLrcFromText, fetchLyricsFromGemini } from "./server/lrcEngine";
 import { searchYouTubeOnServer } from "./server/youtubeSearch";
-import { handleDownload, handleStream } from "./server/youtubeDownload";
 import { fetchYouTubePlaylistOnServer } from "./server/youtubePlaylist";
-import { searchYouTubeMusic, getAlbumDetails, getArtistDetails, getLyricsForTrack } from "./server/youtubeMusicSearch";
 
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
 dns.setDefaultResultOrder("ipv4first");
@@ -14,44 +12,46 @@ dns.setDefaultResultOrder("ipv4first");
 const app = express();
 const PORT = 3000;
 
-// Sliding-window in-memory rate limiter (15 requests per minute per IP for AI requests)
-const ipLimits = new Map<string, { count: number; resetTime: number }>();
+async function startServer() {
+  // Sliding-window in-memory rate limiter (15 requests per minute per IP for AI requests)
+  const ipLimits = new Map<string, { count: number; resetTime: number }>();
 
-const rateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown') as string;
-  const now = Date.now();
-  const limit = ipLimits.get(ip);
+  const rateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown') as string;
+    const now = Date.now();
+    const limit = ipLimits.get(ip);
 
-  if (!limit || now > limit.resetTime) {
-    ipLimits.set(ip, {
-      count: 1,
-      resetTime: now + 60 * 1000
-    });
-    return next();
-  }
+    if (!limit || now > limit.resetTime) {
+      ipLimits.set(ip, {
+        count: 1,
+        resetTime: now + 60 * 1000
+      });
+      return next();
+    }
 
-  if (limit.count >= 15) {
-    console.warn(`[RateLimit] Blocked request from IP: ${ip}`);
-    return res.status(429).json({
-      success: false,
-      error: 'Too many requests. Limit is 15 per minute. / لقد تجاوزت حد الطلبات المسموح به (15 طلب في الدقيقة).'
-    });
-  }
+    if (limit.count >= 15) {
+      console.warn(`[RateLimit] Blocked request from IP: ${ip}`);
+      return res.status(429).json({
+        success: false,
+        error: 'Too many requests. Limit is 15 per minute. / لقد تجاوزت حد الطلبات المسموح به (15 طلب في الدقيقة).'
+      });
+    }
 
-  limit.count++;
-  next();
-};
+    limit.count++;
+    next();
+  };
 
-app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ limit: "20mb", extended: true }));
+  app.use(express.json({ limit: "20mb" }));
+  app.use(express.urlencoded({ limit: "20mb", extended: true }));
 
-// Logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
+  // Logging middleware
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
 
   // Endpoints for listen2song API
+  // ... [Keep existing API routes]
 
   // 1. Plain Lyrics Search Endpoint (via OpenRouter or standard fallback)
   app.get("/api/lyrics", rateLimiter, async (req: express.Request, res: express.Response) => {
@@ -249,58 +249,6 @@ app.use((req, res, next) => {
     }
   });
 
-  // 4.5. YouTube Music Endpoints
-  app.get("/api/ytmusic/search", rateLimiter, async (req: express.Request, res: express.Response) => {
-    const query = req.query.q;
-    if (!query || typeof query !== 'string') {
-      return res.status(400).json({ success: false, error: 'Query is required' });
-    }
-    try {
-      const results = await searchYouTubeMusic(query);
-      res.json({ success: true, results });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  app.get("/api/ytmusic/album/:id", rateLimiter, async (req: express.Request, res: express.Response) => {
-    try {
-      const details = await getAlbumDetails(req.params.id);
-      if (!details) return res.status(404).json({ success: false, error: 'Album not found' });
-      res.json({ success: true, album: details });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  app.get("/api/ytmusic/artist/:id", rateLimiter, async (req: express.Request, res: express.Response) => {
-    try {
-      const details = await getArtistDetails(req.params.id);
-      if (!details) return res.status(404).json({ success: false, error: 'Artist not found' });
-      res.json({ success: true, artist: details });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
-  app.get("/api/ytmusic/lyrics", rateLimiter, async (req: express.Request, res: express.Response) => {
-    const { videoId, title, artist, duration } = req.query;
-    if (!videoId || !title || !artist) {
-      return res.status(400).json({ success: false, error: 'Missing parameters' });
-    }
-    try {
-      const lyrics = await getLyricsForTrack(
-        videoId as string, 
-        title as string, 
-        artist as string, 
-        parseInt(duration as string) || 0
-      );
-      res.json({ success: true, lyrics });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
-
   // YouTube Playlist Proxy Endpoint
   app.get("/api/youtube-playlist", rateLimiter, async (req: express.Request, res: express.Response) => {
     const listId = req.query.list;
@@ -327,32 +275,13 @@ app.use((req, res, next) => {
     }
   });
 
-  // 5. YouTube MP3/Audio Downloader & Streaming Endpoints
-  app.post("/download", rateLimiter, handleDownload);
-  app.post("/api/download", rateLimiter, handleDownload);
-
-  // New Senior Feature: Direct Audio Streaming to bypass YouTube IFrame background restrictions
-  app.get("/api/audio-stream/:id", rateLimiter, async (req: express.Request, res: express.Response) => {
-    const videoId = req.params.id;
-    if (!videoId || videoId.length < 5) {
-      return res.status(400).json({ success: false, error: "Invalid Video ID" });
-    }
-
-    // Pass to the specialized streaming handler
-    handleStream(req, res);
-  });
-
   // Serve with Vite in development, static files in production
   if (process.env.NODE_ENV !== "production") {
-    import("vite").then(async (viteModule) => {
-      const vite = await viteModule.createServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    }).catch(err => {
-      console.error("Failed to dynamically load Vite:", err);
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
     });
+    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -366,5 +295,8 @@ app.use((req, res, next) => {
       console.log(`Server successfully running on port http://localhost:${PORT}`);
     });
   }
+}
 
-  export default app;
+startServer();
+
+export default app;
