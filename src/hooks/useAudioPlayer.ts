@@ -186,6 +186,9 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
 
   // Synchronize playing state with player engines
   useEffect(() => {
+    const isCurrentYt = currentTrack?.source === 'youtube' || currentTrack?.id?.startsWith('youtube-');
+    if (isCurrentYt) return; // العنصر ده مالوش أي علاقة بأغاني يوتيوب — ReactPlayer هو المتحكم
+
     if (audioRef.current && !isInternalLoadingRef.current) {
       if (isPlaying) {
         if (audioRef.current.paused) {
@@ -197,7 +200,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         audioRef.current.pause();
       }
     }
-  }, [isPlaying]);
+  }, [isPlaying, currentTrack]);
 
   // Poll YouTube playing states - DISABLED (Now using standard audio streaming)
   /*

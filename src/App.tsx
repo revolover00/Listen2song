@@ -57,6 +57,11 @@ export default function App() {
   const player = useAudioPlayer(tracks, (msg) => addToast(msg, 'error'));
 
   const ytPlayerRef = useRef<ReactPlayer>(null);
+  const [isYtPlayerReady, setIsYtPlayerReady] = useState(false);
+
+  useEffect(() => {
+    setIsYtPlayerReady(false);
+  }, [player.currentTrack?.id]);
 
   useEffect(() => {
     try {
@@ -77,7 +82,7 @@ export default function App() {
   useEffect(() => {
     const forceResumeIfNeeded = () => {
       const isYt = player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-');
-      if (!isYt || !player.isPlaying || !ytPlayerRef.current) return;
+      if (!isYt || !player.isPlaying || !ytPlayerRef.current || !isYtPlayerReady) return;
 
       try {
         const internalPlayer = ytPlayerRef.current.getInternalPlayer();
@@ -424,11 +429,13 @@ export default function App() {
             muted={player.isMuted}
             width="2px"
             height="2px"
+            onReady={() => setIsYtPlayerReady(true)}
             onProgress={(progress) => player.setCurrentTime(progress.playedSeconds)}
             onDuration={(duration) => player.setDuration(duration)}
             onEnded={player.handleTrackEnded}
             onError={(err) => {
               console.error('[ReactPlayer] YouTube playback error:', err);
+              addToast('Could not play this track from YouTube. Skipping...', 'error');
               player.next();
             }}
             config={{

@@ -61,218 +61,7 @@ interface PlaylistResult {
   isPlaylist: true;
 }
 
-// 100% Reliable Client-Side Direct Search racing both CORS-friendly Piped and Invidious instances
-async function searchYouTubeDirectClientSide(query: string): Promise<SearchResult[]> {
-  const invidiousInstances = [
-    "yewtu.be",
-    "invidious.flokinet.to",
-    "iv.melmac.space",
-    "invidious.projectsegfaut.im",
-    "invidious.perennialte.ch",
-    "invidious.nerdvpn.de",
-    "invidio.xamh.de",
-    "iv.ggtyler.dev",
-    "invidious.lunar.icu",
-    "invidious.no-logs.com",
-    "inv.tux.im"
-  ];
-
-  const pipedInstances = [
-    "pipedapi.kavin.rocks",
-    "pipedapi.tokhmi.xyz",
-    "api.piped.yt",
-    "piped-api.lule.io",
-    "pipedapi.adminforge.de",
-    "pipedapi.astphy.com",
-    "pipedapi.swg.rocks",
-    "pipedapi.colby.school",
-    "pipedapi.us.to",
-    "pipedapi.r4fo.com"
-  ];
-
-  const totalCount = invidiousInstances.length + pipedInstances.length;
-  console.log(`[YouTubeSearchView] Running ultra-fast direct search race across ${totalCount} public endpoints...`);
-
-  return new Promise<SearchResult[]>((resolve) => {
-    let resolved = false;
-    let finishedCount = 0;
-    const controllers: AbortController[] = [];
-
-    // Safety timeout of 4.5 seconds to ensure fast UI response under any network status
-    const safetyTimeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        controllers.forEach(c => {
-          try { c.abort(); } catch (e) {}
-        });
-        console.warn("[YouTubeSearchView] Client-side search race timed out.");
-        resolve([]);
-      }
-    }, 4500);
-
-    const handleSuccess = (results: SearchResult[], instance: string, type: 'Piped' | 'Invidious') => {
-      if (results.length > 0 && !resolved) {
-        resolved = true;
-        clearTimeout(safetyTimeout);
-        controllers.forEach(c => {
-          try { c.abort(); } catch (e) {}
-        });
-        console.log(`[YouTubeSearchView] Client direct search race WON by [${type}: ${instance}] with ${results.length} results!`);
-        resolve(results);
-      }
-    };
-
-    const handleFailure = () => {
-      finishedCount++;
-      if (finishedCount === totalCount && !resolved) {
-        resolved = true;
-        clearTimeout(safetyTimeout);
-        resolve([]);
-      }
-    };
-
-    // Helper to extract video ID
-    const parseVideoId = (item: any): string | null => {
-      if (item.videoId && item.videoId.length === 11) return item.videoId;
-      if (item.id && item.id.length === 11) return item.id;
-      if (item.url) {
-        const match = item.url.match(/[?&]v=([^&#]+)/) || item.url.match(/watch\?v=([^&#]+)/);
-        if (match && match[1]) {
-          return match[1].slice(0, 11);
-        }
-        const parts = item.url.split('/');
-        const lastPart = parts[parts.length - 1];
-        if (lastPart && lastPart.length === 11) {
-          return lastPart;
-        }
-      }
-      return null;
-    };
-
-    // 1. Launch Invidious instances
-    invidiousInstances.forEach((instance) => {
-      const controller = new AbortController();
-      controllers.push(controller);
-
-      fetch(`https://${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=all`, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
-      .then(async (res) => {
-        if (!res.ok) throw new Error();
-        const items = await res.json();
-        if (Array.isArray(items) && items.length > 0) {
-          const results: SearchResult[] = items
-            .map((item: any) => {
-              if (item.type === 'video' && parseVideoId(item)) {
-                const videoId = parseVideoId(item) || "";
-                const seconds = item.lengthSeconds || 0;
-                const m = Math.floor(seconds / 60);
-                const s = Math.floor(seconds % 60);
-                const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
-                return {
-                  videoId,
-                  title: item.title || "Unknown Track",
-                  channelName: item.author || "Unknown Artist",
-                  thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-                  duration
-                };
-              } else if (item.type === 'playlist' && item.playlistId) {
-                return {
-                  playlistId: item.playlistId,
-                  title: item.title || "Unknown Playlist",
-                  channelName: item.author || "YouTube Playlist",
-                  thumbnail: item.playlistThumbnail || `https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80`,
-                  videoCount: item.videoCount || 0,
-                  desc: `Playlist by ${item.author || 'Creator'}`,
-                  isPlaylist: true
-                };
-              }
-              return null;
-            })
-            .filter((item) => item !== null) as SearchResult[];
-
-          if (results.length > 0) {
-            handleSuccess(results, instance, 'Invidious');
-          } else {
-            throw new Error();
-          }
-        } else {
-          throw new Error();
-        }
-      })
-      .catch(() => {
-        handleFailure();
-      });
-    });
-
-    // 2. Launch Piped instances (which specifically support client-side CORS)
-    pipedInstances.forEach((instance) => {
-      const controller = new AbortController();
-      controllers.push(controller);
-
-      fetch(`https://${instance}/search?q=${encodeURIComponent(query)}&filter=all`, {
-        signal: controller.signal
-      })
-      .then(async (res) => {
-        if (!res.ok) throw new Error();
-        const data = await res.json();
-        const items = data.items;
-        if (Array.isArray(items) && items.length > 0) {
-          const results: SearchResult[] = items
-            .map((item: any) => {
-              if ((item.type === 'stream' || item.type === 'video') && parseVideoId(item)) {
-                const videoId = parseVideoId(item) || "";
-                const seconds = item.duration || 0;
-                const m = Math.floor(seconds / 60);
-                const s = Math.floor(seconds % 60);
-                const duration = `${m}:${s < 10 ? '0' : ''}${s}`;
-                return {
-                  videoId,
-                  title: item.title || "Unknown Track",
-                  channelName: item.uploaderName || item.channelName || "Unknown Artist",
-                  thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-                  duration
-                };
-              } else if (item.type === 'playlist') {
-                let playlistId = item.playlistId;
-                if (!playlistId && item.url) {
-                  const match = item.url.match(/[?&]list=([^&#]+)/);
-                  playlistId = match ? match[1] : item.url.split('/').pop();
-                }
-                if (playlistId) {
-                  return {
-                    playlistId,
-                    title: item.title || item.name || "Unknown Playlist",
-                    channelName: item.uploaderName || "YouTube Playlist",
-                    thumbnail: item.thumbnail || `https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80`,
-                    videoCount: item.videos || item.videoCount || 0,
-                    desc: `Playlist by ${item.uploaderName || 'Creator'}`,
-                    isPlaylist: true
-                  };
-                }
-              }
-              return null;
-            })
-            .filter((item) => item !== null) as SearchResult[];
-
-          if (results.length > 0) {
-            handleSuccess(results, instance, 'Piped');
-          } else {
-            throw new Error();
-          }
-        } else {
-          throw new Error();
-        }
-      })
-      .catch(() => {
-        handleFailure();
-      });
-    });
-  });
-}
+// Placeholder for removed function searchYouTubeDirectClientSide
 
 export function YouTubeSearchView({
   onSelectTrack,
@@ -373,22 +162,11 @@ export function YouTubeSearchView({
         
         let searchResults: SearchResult[] = [];
         
-        try {
-          const direct = await searchYouTubeDirectClientSide(randomQuery);
-          if (direct && direct.length > 0) {
-            searchResults = direct;
-          }
-        } catch (e) {
-          console.warn("[YouTubeView] Direct client suggestions failed, falling back:", e);
-        }
-
-        if (searchResults.length === 0) {
-          const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(randomQuery)}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && Array.isArray(data.results)) {
-              searchResults = data.results;
-            }
+        const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(randomQuery)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.results)) {
+            searchResults = data.results;
           }
         }
 
@@ -475,27 +253,12 @@ export function YouTubeSearchView({
     setResults([]);
 
     try {
-      let searchResults: SearchResult[] = [];
-      
-      try {
-        const direct = await searchYouTubeDirectClientSide(activeQuery);
-        if (direct && direct.length > 0) {
-          searchResults = direct;
-        }
-      } catch (e) {
-        console.warn("[YouTubeView] Direct client search failed, falling back:", e);
+      const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(activeQuery)}`);
+      if (!res.ok) {
+        throw new Error('Server-side search failed');
       }
-      
-      if (searchResults.length === 0) {
-        const res = await fetch(`/api/youtube-search?q=${encodeURIComponent(activeQuery)}`);
-        if (!res.ok) {
-          throw new Error('Server-side search failed');
-        }
-        const data = await res.json();
-        if (data.success && Array.isArray(data.results)) {
-          searchResults = data.results;
-        }
-      }
+      const data = await res.json();
+      const searchResults = data.success && Array.isArray(data.results) ? data.results : [];
 
       setResults(searchResults);
       if (searchResults.length === 0) {
