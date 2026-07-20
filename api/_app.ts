@@ -10,7 +10,6 @@ import { fetchYouTubePlaylistOnServer } from "./server/youtubePlaylist";
 dns.setDefaultResultOrder("ipv4first");
 
 const app = express();
-const PORT = 3000;
 
 async function startServer() {
   // Sliding-window in-memory rate limiter (15 requests per minute per IP for AI requests)
@@ -51,8 +50,7 @@ async function startServer() {
   });
 
   // Endpoints for listen2song API
-  // ... [Keep existing API routes]
-
+  
   // 1. Plain Lyrics Search Endpoint (via OpenRouter or standard fallback)
   app.get("/api/lyrics", rateLimiter, async (req: express.Request, res: express.Response) => {
     const songParam = req.query.song;
@@ -287,12 +285,6 @@ async function startServer() {
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
-
-  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server successfully running on port http://localhost:${PORT}`);
     });
   }
 }
