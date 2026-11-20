@@ -173,7 +173,7 @@ async function startServer() {
   // 4. YouTube Video Search Proxy (highly robust scraper fallback)
   app.get("/api/youtube-search", rateLimiter, async (req: express.Request, res: express.Response) => {
     const query = req.query.q;
-    if (!query || typeof query !== 'string') {
+    if (!query || typeof query !== 'string' || query.trim().length < 2 || query.trim().length > 100) {
       return res.status(400).json({
         success: false,
         error: 'Query parameter "q" is required / كلمة البحث مطلوبة'
@@ -198,7 +198,7 @@ async function startServer() {
   // YouTube Playlist Proxy Endpoint
   app.get("/api/youtube-playlist", rateLimiter, async (req: express.Request, res: express.Response) => {
     const listId = req.query.list;
-    if (!listId || typeof listId !== 'string') {
+    if (!listId || typeof listId !== 'string' || !/^[A-Za-z0-9_-]{10,64}$/.test(listId)) {
       return res.status(400).json({
         success: false,
         error: 'Playlist ID "list" is required / معرف قائمة التشغيل مطلوب'
