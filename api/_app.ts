@@ -2,9 +2,10 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dns from "dns";
-import { generateLrcFromAudio, generateLrcFromText, fetchLyricsFromGemini } from "./server/lrcEngine";
-import { searchYouTubeOnServer } from "./server/youtubeSearch";
-import { fetchYouTubePlaylistOnServer } from "./server/youtubePlaylist";
+import { generateLrcFromText, fetchLyricsFromGemini } from "../server/lrcEngine";
+import { searchYouTubeOnServer } from "../server/youtubeSearch";
+import { fetchYouTubePlaylistOnServer } from "../server/youtubePlaylist";
+import { createInMemoryRateLimiter } from "../server/inMemoryRateLimiter";
 
 // Set default DNS resolution to ipv4 first to avoid slow localhost resolving issues
 dns.setDefaultResultOrder("ipv4first");
@@ -12,33 +13,8 @@ dns.setDefaultResultOrder("ipv4first");
 const app = express();
 
 async function startServer() {
-  // Sliding-window in-memory rate limiter (15 requests per minute per IP for AI requests)
-  const ipLimits = new Map<string, { count: number; resetTime: number }>();
-
-  const rateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const ip = (req.ip || req.headers['x-forwarded-for'] || 'unknown') as string;
-    const now = Date.now();
-    const limit = ipLimits.get(ip);
-
-    if (!limit || now > limit.resetTime) {
-      ipLimits.set(ip, {
-        count: 1,
-        resetTime: now + 60 * 1000
-      });
-      return next();
-    }
-
-    if (limit.count >= 15) {
-      console.warn(`[RateLimit] Blocked request from IP: ${ip}`);
-      return res.status(429).json({
-        success: false,
-        error: 'Too many requests. Limit is 15 per minute. / لقد تجاوزت حد الطلبات المسموح به (15 طلب في الدقيقة).'
-      });
-    }
-
-    limit.count++;
-    next();
-  };
+  // Per-process, bounded limit; use a shared store if the app scales to multiple instances.
+  const rateLimiter = createInMemoryRateLimiter();
 
   app.use(express.json({ limit: "20mb" }));
   app.use(express.urlencoded({ limit: "20mb", extended: true }));
@@ -184,42 +160,14 @@ async function startServer() {
     }
   });
 
-  // 3. Audio-Based LRC Neural Speech Transcription Endpoint (Disabled)
-  app.post("/api/generate-lrc-audio", rateLimiter, async (req: express.Request, res: express.Response) => {
-    let { song, artist, plainLyrics, audioBase64, mimeType } = req.body;
-
-    if (!song || typeof song !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Song title is required and must be a string / اسم الأغنية مطلوب ويجب أن يكون نصاً'
-      });
-    }
-
-    if (!audioBase64 || typeof audioBase64 !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Audio binary payload is required for neural tracking and must be a string / ملف الصوت مطلوب لبدء المزامنة العصبية ويجب أن يكون نصاً'
-      });
-    }
-
-    artist = typeof artist === 'string' ? artist.trim() : '';
-    plainLyrics = typeof plainLyrics === 'string' ? plainLyrics.trim() : '';
-    mimeType = typeof mimeType === 'string' ? mimeType.trim() : 'audio/mp3';
-
-    try {
-      const lrc = await generateLrcFromAudio(audioBase64, mimeType, song.trim(), artist, plainLyrics);
-      res.json({
-        success: true,
-        lrc,
-        model: "audio-synchronizer"
-      });
-    } catch (err: any) {
-      console.error('[LRC Audio Sync Error]', err.message || err);
-      res.status(500).json({
-        success: false,
-        error: err.message || 'Failed to process audio tracking.'
-      });
-    }
+  // 3. Audio-based synchronization is intentionally disabled until a supported
+  // transcription provider is configured; report service unavailability, not a server crash.
+  app.post("/api/generate-lrc-audio", (_req: express.Request, res: express.Response) => {
+    return res.status(503).json({
+      success: false,
+      code: "FEATURE_DISABLED",
+      error: "Audio synchronization is temporarily unavailable. Use text-based synchronization instead. / المزامنة الصوتية غير متاحة مؤقتاً؛ استخدم المزامنة النصية.",
+    });
   });
 
   // 4. YouTube Video Search Proxy (highly robust scraper fallback)

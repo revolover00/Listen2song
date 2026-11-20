@@ -1,13 +1,3 @@
-export async function generateLrcFromAudio(
-  audioBase64: string,
-  mimeType: string,
-  songTitle: string,
-  artistName: string,
-  plainLyrics?: string
-): Promise<string> {
-  throw new Error("Neural audio synchronization is currently disabled because Gemini has been removed. Please use the text-based synchronization instead! / المزامنة العصبية للصوت معطلة حالياً بسبب إزالة Gemini. يرجى استخدام المزامنة النصية.");
-}
-
 export async function fetchLyricsFromGemini(
   songTitle: string,
   artistName?: string

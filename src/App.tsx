@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import ReactPlayer from 'react-player';
+import React, { lazy, Suspense, useState, useRef, useEffect } from 'react';
+import type ReactPlayerInstance from 'react-player';
 import { usePlaylist } from './hooks/usePlaylist';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useAverageColor } from './hooks/useAverageColor';
@@ -16,6 +16,8 @@ import { Track, Playlist } from './types';
 import { EditTrackModal } from './components/player/EditTrackModal';
 import { MiniPlayer } from './components/player/MiniPlayer';
 import { STORAGE_KEYS } from './constants';
+
+const LazyReactPlayer = lazy(() => import('react-player'));
 
 export default function App() {
   const [activeSection, setActiveSection] = useState('home');
@@ -56,7 +58,7 @@ export default function App() {
 
   const player = useAudioPlayer(tracks, (msg) => addToast(msg, 'error'));
 
-  const ytPlayerRef = useRef<ReactPlayer>(null);
+  const ytPlayerRef = useRef<ReactPlayerInstance>(null);
   const [isYtPlayerReady, setIsYtPlayerReady] = useState(false);
 
   useEffect(() => {
@@ -71,7 +73,9 @@ export default function App() {
         player.seekTo(lastPosition);
         player.play();
       }
-    } catch (e) {}
+    } catch {
+      // Playback continues normally when storage is unavailable; resume is best-effort.
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -117,7 +121,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(watchdog);
     };
-  }, [player.isPlaying, player.currentTrack?.id]);
+  }, [player.isPlaying, player.currentTrack?.id, isYtPlayerReady]);
 
   // Sync ReactPlayer seek
   const onSeek = (time: number) => {
@@ -420,8 +424,10 @@ export default function App() {
           pointerEvents: 'none',
         }}
       >
-        {(player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-')) && (
-          <ReactPlayer
+        <Suspense fallback={null}>
+          {(player.currentTrack?.source === 'youtube' || player.currentTrack?.id?.startsWith('youtube-')) && (
+          <LazyReactPlayer
+            key={player.currentTrack.id}
             ref={ytPlayerRef}
             url={`https://www.youtube.com/watch?v=${player.currentTrack.youtubeId || player.currentTrack.audioUrl}`}
             playing={player.isPlaying}
@@ -444,7 +450,8 @@ export default function App() {
               },
             }}
           />
-        )}
+          )}
+        </Suspense>
       </div>
 
       {statusMessage && (
