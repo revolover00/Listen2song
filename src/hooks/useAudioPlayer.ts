@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { Track } from '../types';
 import { STORAGE_KEYS } from '../constants';
 
+function persistPlayerValue(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Playback is still usable when browser storage is disabled or full.
+  }
+}
+
 export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) => void) {
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -370,7 +378,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
 
   const pause = () => {
     setIsPlaying(false);
-    try { localStorage.setItem(STORAGE_KEYS.WAS_PLAYING, 'false'); } catch (e) {}
+    persistPlayerValue(STORAGE_KEYS.WAS_PLAYING, 'false');
   };
 
   const togglePlay = () => {
@@ -382,10 +390,8 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
   useEffect(() => {
     if (!isPlaying) return;
     const interval = setInterval(() => {
-      try {
-        localStorage.setItem(STORAGE_KEYS.LAST_POSITION, String(currentTime));
-        localStorage.setItem(STORAGE_KEYS.WAS_PLAYING, 'true');
-      } catch (e) {}
+      persistPlayerValue(STORAGE_KEYS.LAST_POSITION, String(currentTime));
+      persistPlayerValue(STORAGE_KEYS.WAS_PLAYING, 'true');
     }, 5000);
     return () => clearInterval(interval);
   }, [isPlaying, currentTime]);
@@ -394,7 +400,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
     const track = tracks.find(t => t.id === id);
     const isYt = track?.source === 'youtube' || id.startsWith('youtube-');
     setCurrentTrackId(id);
-    localStorage.setItem(STORAGE_KEYS.CURRENT_TRACK_ID, id);
+    persistPlayerValue(STORAGE_KEYS.CURRENT_TRACK_ID, id);
     
     // Remove from unplayed shuffle list when played
     setUnplayedShuffleIds(prevUnplayed => {
@@ -499,7 +505,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
       }
       audioRef.current.muted = vol === 0 ? true : isMuted;
     }
-    localStorage.setItem(STORAGE_KEYS.VOLUME, vol.toString());
+    persistPlayerValue(STORAGE_KEYS.VOLUME, vol.toString());
   };
 
   const toggleMute = () => {
@@ -513,7 +519,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
   const toggleShuffle = () => {
     const fresh = !isShuffle;
     setIsShuffle(fresh);
-    localStorage.setItem(STORAGE_KEYS.SHUFFLE_MODE, fresh.toString());
+    persistPlayerValue(STORAGE_KEYS.SHUFFLE_MODE, fresh.toString());
   };
 
   const toggleRepeat = () => {
@@ -521,7 +527,7 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
     if (isRepeat === 'none') mode = 'all';
     else if (isRepeat === 'all') mode = 'one';
     setIsRepeat(mode);
-    localStorage.setItem(STORAGE_KEYS.REPEAT_MODE, mode);
+    persistPlayerValue(STORAGE_KEYS.REPEAT_MODE, mode);
   };
 
   // Get next upcoming track preview
@@ -607,7 +613,9 @@ export function useAudioPlayer(tracks: Track[], onLoadError?: (message: string) 
         for (const action of actionsToClear) {
           try {
             navigator.mediaSession.setActionHandler(action, null);
-          } catch (e) {}
+          } catch {
+            // Some browsers reject clearing action handlers they never supported.
+          }
         }
       }
     };
